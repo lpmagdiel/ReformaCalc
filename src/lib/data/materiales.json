@@ -1,0 +1,208 @@
+{
+	"meta": {
+		"fuente": "Obramat (obramat.es)",
+		"moneda": "EUR",
+		"ivaIncluido": true,
+		"fechaActualizacion": "2026-07",
+		"nota": "Precios reales de obramat.es recopilados vía capturas de web.archive.org (2025), IVA incluido salvo indicación. Actualiza este archivo para refrescar los presupuestos."
+	},
+	"materiales": [
+		{
+			"id": "placa_yeso_estandar",
+			"nombre": "Placa de yeso laminado estándar Placo BA",
+			"categoria": "drywall",
+			"formato": "2500 × 1200 × 13 mm",
+			"unidad": "ud",
+			"precio": 7.63,
+			"superficieM2": 3.0,
+			"fuente": "obramat.es (archive.org, sep-2025)"
+		},
+		{
+			"id": "placa_yeso_hidrofuga",
+			"nombre": "Placa de yeso laminado hidrófuga PPM",
+			"categoria": "drywall",
+			"formato": "2500 × 1200 × 13 mm",
+			"unidad": "ud",
+			"precio": 15.84,
+			"superficieM2": 3.0,
+			"fuente": "obramat.es (archive.org, sep-2025)"
+		},
+		{
+			"id": "montante_m48",
+			"nombre": "Perfil montante Placo M48",
+			"categoria": "drywall",
+			"formato": "3 m",
+			"unidad": "ud",
+			"precio": 2.53,
+			"longitudM": 3.0,
+			"fuente": "obramat.es (archive.org, ago-2025)"
+		},
+		{
+			"id": "canal_c48",
+			"nombre": "Perfil canal Placo C48 (guía suelo/techo)",
+			"categoria": "drywall",
+			"formato": "3 m",
+			"unidad": "ud",
+			"precio": 2.03,
+			"longitudM": 3.0,
+			"fuente": "obramat.es (archive.org, jul-2025)"
+		},
+		{
+			"id": "tornillos_placa",
+			"nombre": "Tornillos autorroscantes Placo 3,5 × 25 mm",
+			"categoria": "drywall",
+			"formato": "caja 1000 ud",
+			"unidad": "caja",
+			"precio": 5.5,
+			"udsPorEnvase": 1000,
+			"fuente": "obramat.es (archive.org, may-2025)"
+		},
+		{
+			"id": "tornillos_estructura",
+			"nombre": "Tornillos autotaladrantes Placo 3,5 × 9,5 mm",
+			"categoria": "drywall",
+			"formato": "caja 500 ud",
+			"unidad": "caja",
+			"precio": 3.12,
+			"udsPorEnvase": 500,
+			"fuente": "obramat.es (archive.org, sep-2025)"
+		},
+		{
+			"id": "cinta_juntas",
+			"nombre": "Cinta de juntas de papel 50 mm",
+			"categoria": "drywall",
+			"formato": "rollo 150 m",
+			"unidad": "rollo",
+			"precio": 3.55,
+			"longitudM": 150,
+			"fuente": "obramat.es (archive.org, ago-2025)"
+		},
+		{
+			"id": "pasta_juntas",
+			"nombre": "Pasta de juntas Placo SN",
+			"categoria": "drywall",
+			"formato": "saco 25 kg",
+			"unidad": "saco",
+			"precio": 16.93,
+			"kgPorEnvase": 25,
+			"fuente": "obramat.es (archive.org, oct-2025)"
+		},
+		{
+			"id": "lana_mineral",
+			"nombre": "Panel lana de roca Alpharock Premium 40 mm",
+			"categoria": "drywall",
+			"formato": "paquete 8,1 m² (135 × 60 cm, 10 paneles)",
+			"unidad": "paquete",
+			"precio": 51.61,
+			"superficieM2": 8.1,
+			"fuente": "obramat.es (archive.org, oct-2025)"
+		},
+		{
+			"id": "banda_acustica",
+			"nombre": "Banda estanca perimetral Placo",
+			"categoria": "drywall",
+			"formato": "rollo 30 m",
+			"unidad": "rollo",
+			"precio": 12.3,
+			"longitudM": 30,
+			"fuente": "obramat.es (archive.org, nov-2025; precio península estimado, captura con IGIC 10,50 €)"
+		},
+		{
+			"id": "bloque_hormigon_15",
+			"nombre": "Bloque de hormigón",
+			"categoria": "block",
+			"formato": "15 × 20 × 40 cm",
+			"unidad": "ud",
+			"precio": 0.73,
+			"fuente": "consydecor.com (IVA incl.); referencia Obramat del 20: 0,70 € (archive.org, oct-2025)"
+		},
+		{
+			"id": "ladrillo_hueco_doble",
+			"nombre": "Ladrillo hueco doble",
+			"categoria": "ladrillo",
+			"formato": "7 × 24 × 11,5 cm",
+			"unidad": "ud",
+			"precio": 0.45,
+			"fuente": "obramat.es (archive.org, sep-2025; rasillón 40×20×7, formato próximo)"
+		},
+		{
+			"id": "mortero_seco",
+			"nombre": "Mortero seco de albañilería M-7,5",
+			"categoria": "albanileria",
+			"formato": "saco 25 kg",
+			"unidad": "saco",
+			"precio": 2.15,
+			"kgPorEnvase": 25,
+			"fuente": "obramat.es (archive.org, oct-2025)"
+		},
+		{
+			"id": "cemento",
+			"nombre": "Cemento gris 32,5N",
+			"categoria": "albanileria",
+			"formato": "saco 25 kg",
+			"unidad": "saco",
+			"precio": 4.1,
+			"kgPorEnvase": 25,
+			"fuente": "obramat.es (archive.org, ene-2026)"
+		},
+		{
+			"id": "arena",
+			"nombre": "Arena de río 0-6 mm",
+			"categoria": "albanileria",
+			"formato": "saco 15 kg",
+			"unidad": "saco",
+			"precio": 0.48,
+			"kgPorEnvase": 15,
+			"fuente": "obramat.es (archive.org, sep-2025)"
+		},
+		{
+			"id": "yeso_construccion",
+			"nombre": "Yeso controlado Longips GA",
+			"categoria": "albanileria",
+			"formato": "saco 17 kg",
+			"unidad": "saco",
+			"precio": 1.94,
+			"kgPorEnvase": 17,
+			"fuente": "obramat.es (archive.org, ene-2026)"
+		}
+	],
+	"manoObra": {
+		"drywall": {
+			"precioM2": 20.0,
+			"m2PorDia": 25,
+			"cuadrilla": "2 montadores",
+			"fuente": "preciom2.com / reformasmadrid20.com (2025): 18-35 €/m² montaje, 25-40 m²/día por instalador"
+		},
+		"block": {
+			"precioM2": 18.0,
+			"m2PorDia": 15,
+			"cuadrilla": "albañil + peón",
+			"fuente": "CYPE FFQ020 (17,05 €/m²) y habitissimo (2025)"
+		},
+		"ladrillo": {
+			"precioM2": 14.0,
+			"m2PorDia": 10,
+			"cuadrilla": "albañil + peón",
+			"fuente": "CYPE FFQ010 (13,15 €/m²) y preciom2 (8-12 m²/día)"
+		}
+	},
+	"consumos": {
+		"drywall": {
+			"desperdicioPlacas": 0.1,
+			"tornillosPorM2Placa": 20,
+			"tornillosEstructuraPorMontante": 6,
+			"pastaKgPorM2Placa": 0.45,
+			"cintaMetrosPorPlaca": 3.7
+		},
+		"block": {
+			"udsPorM2": 12.5,
+			"desperdicio": 0.05,
+			"morteroKgPorM2": 21
+		},
+		"ladrillo": {
+			"udsPorM2": 32,
+			"desperdicio": 0.07,
+			"morteroKgPorM2": 12
+		}
+	}
+}
