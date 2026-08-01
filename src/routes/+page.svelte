@@ -1,5 +1,8 @@
 <script lang="ts">
   import materials from '$lib/data/materiales.json';
+  import { downloadProject, copyProjectToClipboard, importProject } from '$lib/projectExchange.js';
+  import type { ReformaCalcProject } from '$lib/projectExchange.js';
+  import { downloadData, copyToClipboardData } from '$lib/exporters/exportManager.js';
 
   type Kind = 'drywall' | 'block' | 'ladrillo';
   type Material = (typeof materials.materiales)[number];
@@ -32,6 +35,178 @@
   let withInsulation = $state(true);
   let laborOn = $state(true);
   let projectName = $state('Pared salón');
+  let projectId = $state('');
+  let createdAt = $state('');
+  let fileInput: HTMLInputElement | null = $state(null);
+  let toast: { message: string; type: 'success' | 'error' } | null = $state(null);
+  let toastTimer: ReturnType<typeof setTimeout> | undefined = $state();
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    toast = { message, type };
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast = null), 3400);
+  }
+
+  function round2(value: number) {
+    return Math.round(value * 100) / 100;
+  }
+
+  function ensureProjectIdentity() {
+    if (!projectId) {
+      projectId = crypto.randomUUID?.() ?? `rcp-${Date.now().toString(36)}`;
+      createdAt = new Date().toISOString();
+    }
+  }
+
+  function systemLabel(kind: Kind) {
+    return kind === 'drywall' ? 'pladur' : kind === 'block' ? 'bloque' : 'ladrillo';
+  }
+
+  function buildProject() {
+    ensureProjectIdentity();
+    return {
+      project: { id: projectId, name: projectName, description: '', createdAt, updatedAt: new Date().toISOString() },
+      calculation: {
+        category: 'wall',
+        system: systemLabel(kind),
+        dimensions: { width, height, area: result.area },
+        configuration: {
+          faces: 2,
+          studSpacing: kind === 'drywall' ? round2(studSpacing / 100) : 0,
+          insulation: withInsulation
+        }
+      },
+      summary: {
+        materials: round2(result.total),
+        labor: round2(result.labor),
+        total: round2(result.grandTotal),
+        hours: result.hours
+      },
+      materials: result.lines.map((line) => ({
+        id: line.material.id,
+        name: line.material.nombre,
+        category: line.material.categoria,
+        unit: line.material.unidad,
+        quantity: line.quantity,
+        unitPrice: line.material.precio,
+        total: round2(line.total)
+      }))
+    };
+  }
+
+  function handleExport() {
+    downloadProject(buildProject());
+    showToast('Proyecto exportado correctamente.');
+  }
+
+  async function handleCopyJson() {
+    const ok = await copyProjectToClipboard(buildProject());
+    showToast(ok ? 'Proyecto copiado al portapapeles.' : 'No se pudo copiar el proyecto.', ok ? 'success' : 'error');
+  }
+
+  const APP_METADATA = {
+    app: 'ReformaCalc',
+    appVersion: '1.2',
+    currency: materials.meta.moneda,
+    language: 'es'
+  };
+
+  function buildAppData() {
+    ensureProjectIdentity();
+    return {
+      id: projectId,
+      title: projectName,
+      description: '',
+      system: systemLabel(kind),
+      area: result.area,
+      dimensions: { width, height, length: 0 },
+      estimatedHours: result.hours,
+      materialsCost: round2(result.total),
+      laborCost: round2(result.labor),
+      totalCost: round2(result.grandTotal),
+      materials: result.lines.map((line) => ({
+        id: line.material.id,
+        name: line.material.nombre,
+        quantity: line.quantity,
+        unit: line.material.unidad,
+        unitPrice: line.material.precio,
+        totalPrice: round2(line.total)
+      }))
+    };
+  }
+
+  function handleExportRCX() {
+    try {
+      downloadData('rcx', buildAppData(), { filename: projectName, appMetadata: APP_METADATA });
+      showToast('Proyecto exportado en formato RCX.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No se pudo exportar el proyecto en formato RCX.', 'error');
+    }
+  }
+
+  async function handleCopyRCX() {
+    let ok = false;
+    try {
+      ok = await copyToClipboardData('rcx', buildAppData(), { appMetadata: APP_METADATA });
+    } catch {
+      ok = false;
+    }
+    showToast(ok ? 'Proyecto copiado al portapapeles en formato RCX.' : 'No se pudo copiar el proyecto en formato RCX.', ok ? 'success' : 'error');
+  }
+
+  const systemToKind: Record<string, Kind> = {
+    pladur: 'drywall',
+    pladur_seco: 'drywall',
+    drywall: 'drywall',
+    bloque: 'block',
+    block: 'block',
+    ladrillo: 'ladrillo'
+  };
+
+  const spacingOptions: (40 | 50 | 60 | 80)[] = [40, 50, 60, 80];
+
+  function nearestSpacing(cm: number): 40 | 50 | 60 | 80 {
+    return spacingOptions.reduce((best, s) => (Math.abs(s - cm) < Math.abs(best - cm) ? s : best), spacingOptions[0]);
+  }
+
+  function applyProject(project: ReformaCalcProject) {
+    const calc = project.calculation ?? ({} as ReformaCalcProject['calculation']);
+    const dims = calc.dimensions ?? ({} as ReformaCalcProject['calculation']['dimensions']);
+    const cfg = calc.configuration ?? ({} as ReformaCalcProject['calculation']['configuration']);
+    const meta = project.project ?? ({} as ReformaCalcProject['project']);
+    if (meta.id) projectId = meta.id;
+    if (meta.createdAt) createdAt = meta.createdAt;
+    projectName = meta.name || projectName;
+    kind = systemToKind[calc.system] ?? kind;
+    if (typeof dims.width === 'number' && dims.width > 0) width = dims.width;
+    if (typeof dims.height === 'number' && dims.height > 0) height = dims.height;
+    const area = typeof dims.area === 'number' && dims.area >= 0 ? dims.area : width * height;
+    openings = round2(Math.max(0, width * height - area));
+    studSpacing = nearestSpacing(typeof cfg.studSpacing === 'number' && cfg.studSpacing > 0 ? cfg.studSpacing * 100 : studSpacing);
+    withInsulation = cfg.insulation !== false;
+    laborOn = true;
+    step = 3;
+    menu = 'wizard';
+  }
+
+  function handleImportClick() {
+    fileInput?.click();
+  }
+
+  async function handleImport(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      applyProject(importProject(text));
+      showToast('Proyecto importado correctamente.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No se pudo importar el proyecto.', 'error');
+    } finally {
+      input.value = '';
+    }
+  }
 
   function startWizard() {
     menu = 'wizard';
@@ -104,7 +279,7 @@
 
   function next() { if (step < 3) step = (step + 1) as 1 | 2 | 3; }
   function back() { if (step > 1) step = (step - 1) as 1 | 2 | 3; }
-  function reset() { width = 3.2; height = 2.6; openings = 0; thickness = 'M48'; studSpacing = 60; withInsulation = true; laborOn = true; step = 1; menu = 'home'; }
+  function reset() { width = 3.2; height = 2.6; openings = 0; thickness = 'M48'; studSpacing = 60; withInsulation = true; laborOn = true; step = 1; menu = 'home'; projectId = ''; createdAt = ''; }
 </script>
 
 <svelte:head>
@@ -145,6 +320,8 @@
             </button>
           {/each}
         </div>
+        <button class="import-btn" onclick={handleImportClick}>⇤ Importar proyecto</button>
+        <input type="file" accept=".rcp.json,.json,application/json" hidden bind:this={fileInput} onchange={handleImport} />
       </section>
     {:else}
       <section class="intro">
@@ -224,6 +401,10 @@
           <button onclick={() => window.print()}>⎙ Imprimir / PDF</button>
           <button onclick={() => { const text = `${projectName}\n${result.lines.map((l) => `- ${l.quantity} ${l.material.unidad === 'unidad' ? 'uds.' : l.material.unidad}s · ${l.material.nombre} = ${euro(l.total)}`).join('\n')}\nMateriales: ${euro(result.total)}\nMano de obra: ${euro(result.labor)}\nTotal: ${euro(result.grandTotal)}`; navigator.clipboard?.writeText(text); }}>⎘ Copiar</button>
           <button onclick={reset}>↺ Nuevo</button>
+          <button onclick={handleExport}>⇩ Exportar</button>
+          <button onclick={handleCopyJson}>⧉ Copiar JSON</button>
+          <button onclick={handleExportRCX} title="Descargar proyecto en el estándar RCX (.rcx.json)">⇩ Exportar a RCX</button>
+          <button onclick={handleCopyRCX} title="Copiar proyecto en el estándar RCX">⧉ Copiar RCX</button>
         </div>
         <div class="step-nav"><button class="ghost" onclick={back}>← Atrás</button><button class="primary" onclick={() => (step = 2)}>Modificar medidas</button></div>
         <div class="notice"><span>i</span><p>Estimación orientativa con precios de referencia de Obramat (actualizados {materials.meta.fechaActualizacion}). Incluye merma y consumos técnicos. Mano de obra orientativa; verifica precios y stock en tu almacén.</p></div>
@@ -231,6 +412,13 @@
     {/if}
     {/if}
   </main>
+
+  {#if toast}
+    <div class="toast" class:error={toast.type === 'error'} role="status" aria-live="polite">
+      <span class="toast-icon">{toast.type === 'success' ? '✓' : '✕'}</span>
+      <span>{toast.message}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -418,6 +606,51 @@
   .notice {display:flex;gap:9px;background:#29383b;border-radius:10px;padding:11px 12px;margin-top:14px;align-items:flex-start;}
   .notice span {border:1px solid #b7ce3b;color:#d7ef4a;border-radius:50%;width:16px;height:16px;display:grid;place-items:center;font-size:10px;flex:none;}
   .notice p {font-size:11px!important;line-height:1.4;}
+
+  .import-btn {
+    margin-top: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #dde5e6;
+    border-radius: 12px;
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #46545a;
+    cursor: pointer;
+    transition: .2s;
+  }
+  .import-btn:hover { background: #f6f9e9; border-color: #b8cd25; color: #31400d; }
+  :global(body.dark) .import-btn { background: #182328; border-color: #2a383b; color: #aab8ba; }
+  :global(body.dark) .import-btn:hover { background: #1d2a17; border-color: #b8cd25; color: #d7ef4a; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    max-width: min(90vw, 460px);
+    background: #202d31;
+    color: white;
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px #00000030;
+    z-index: 50;
+    animation: toastIn .25s ease;
+  }
+  .toast.error { background: #7a1f1f; }
+  .toast-icon { color: #d7ef4a; font-weight: 800; flex: none; }
+  .toast.error .toast-icon { color: #ffb4a2; }
+  :global(body.dark) .toast { background: #0f1719; border: 1px solid #2a383b; }
+  :global(body.dark) .toast.error { background: #3a1212; border-color: #7a1f1f; }
+  @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
   @media (max-width: 700px) {
     .app-shell {padding:0 16px;}
