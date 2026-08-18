@@ -4,7 +4,10 @@
   import type { ReformaCalcProject } from '$lib/projectExchange.js';
   import { downloadData, copyToClipboardData } from '$lib/exporters/exportManager.js';
 
-  type Kind = 'drywall' | 'block' | 'ladrillo';
+  type Category = 'wall' | 'roof';
+  type Kind = 'drywall' | 'block' | 'ladrillo' | 'continuo' | 'desmontable';
+  type WallKind = 'drywall' | 'block' | 'ladrillo';
+  type RoofKind = 'continuo' | 'desmontable';
   type Material = (typeof materials.materiales)[number];
   type Line = { material: Material; quantity: number; total: number; detail: string };
 
@@ -18,7 +21,7 @@
 
   const menuItems: MenuItem[] = [
     { id: 'wall', title: 'Pared simple', subtitle: 'Tabique de drywall, bloque o ladrillo', available: true, icon: 'wall' },
-    { id: 'roof', title: 'Techo', subtitle: 'Falso techo continuo o desmontable', available: false, icon: 'roof' },
+    { id: 'roof', title: 'Techo', subtitle: 'Falso techo continuo o desmontable', available: true, icon: 'roof' },
     { id: 'floor', title: 'Suelo', subtitle: 'Tarima, cerámica o microcemento', available: false, icon: 'floor' },
     { id: 'bath', title: 'Baño completo', subtitle: 'Reforma integral de baño', available: false, icon: 'bath' }
   ];
@@ -26,6 +29,7 @@
   let menu: 'home' | 'wizard' = $state('home');
 
   let step: 1 | 2 | 3 = $state(1);
+  let category: Category = $state('wall');
   let kind: Kind = $state('drywall');
   let width: number = $state(3.2);
   let height: number = $state(2.6);
@@ -34,6 +38,7 @@
   let studSpacing: 40 | 50 | 60 | 80 = $state(60);
   let withInsulation = $state(true);
   let laborOn = $state(true);
+  let roofDropCm: number = $state(10);
   let projectName = $state('Pared salón');
   let projectId = $state('');
   let createdAt = $state('');
@@ -58,20 +63,45 @@
     }
   }
 
-  function systemLabel(kind: Kind) {
-    return kind === 'drywall' ? 'pladur' : kind === 'block' ? 'bloque' : 'ladrillo';
+  function systemLabel(kind: Kind): string {
+    switch (kind) {
+      case 'drywall': return 'pladur';
+      case 'block': return 'bloque';
+      case 'ladrillo': return 'ladrillo';
+      case 'continuo': return 'techo_continuo';
+      case 'desmontable': return 'techo_desmontable';
+    }
+  }
+
+  function isRoofKind(kind: Kind): kind is RoofKind {
+    return kind === 'continuo' || kind === 'desmontable';
+  }
+
+  function isWallKind(kind: Kind): kind is WallKind {
+    return kind === 'drywall' || kind === 'block' || kind === 'ladrillo';
+  }
+
+  function systemPrettyLabel(kind: Kind): string {
+    switch (kind) {
+      case 'drywall': return 'Pladur';
+      case 'block': return 'Block';
+      case 'ladrillo': return 'Ladrillo';
+      case 'continuo': return 'Falso techo continuo';
+      case 'desmontable': return 'Falso techo desmontable';
+    }
   }
 
   function buildProject() {
     ensureProjectIdentity();
+    const dims = category === 'roof' ? { width, height: 0, area: result.area } : { width, height, area: result.area };
     return {
       project: { id: projectId, name: projectName, description: '', createdAt, updatedAt: new Date().toISOString() },
       calculation: {
-        category: 'wall',
+        category,
         system: systemLabel(kind),
-        dimensions: { width, height, area: result.area },
+        dimensions: dims,
         configuration: {
-          faces: 2,
+          faces: category === 'wall' ? 2 : 1,
           studSpacing: kind === 'drywall' ? round2(studSpacing / 100) : 0,
           insulation: withInsulation
         }
@@ -119,7 +149,7 @@
       description: '',
       system: systemLabel(kind),
       area: result.area,
-      dimensions: { width, height, length: 0 },
+      dimensions: { width, height: category === 'wall' ? height : 0, length: 0 },
       estimatedHours: result.hours,
       materialsCost: round2(result.total),
       laborCost: round2(result.labor),
@@ -160,7 +190,30 @@
     drywall: 'drywall',
     bloque: 'block',
     block: 'block',
-    ladrillo: 'ladrillo'
+    ladrillo: 'ladrillo',
+    techo_continuo: 'continuo',
+    continuo: 'continuo',
+    falso_techo_continuo: 'continuo',
+    techo_desmontable: 'desmontable',
+    desmontable: 'desmontable',
+    falso_techo_desmontable: 'desmontable',
+    registrable: 'desmontable'
+  };
+
+  const systemToCategory: Record<string, Category> = {
+    pladur: 'wall',
+    pladur_seco: 'wall',
+    drywall: 'wall',
+    bloque: 'wall',
+    block: 'wall',
+    ladrillo: 'wall',
+    techo_continuo: 'roof',
+    continuo: 'roof',
+    falso_techo_continuo: 'roof',
+    techo_desmontable: 'roof',
+    desmontable: 'roof',
+    falso_techo_desmontable: 'roof',
+    registrable: 'roof'
   };
 
   const spacingOptions: (40 | 50 | 60 | 80)[] = [40, 50, 60, 80];
@@ -177,12 +230,21 @@
     if (meta.id) projectId = meta.id;
     if (meta.createdAt) createdAt = meta.createdAt;
     projectName = meta.name || projectName;
-    kind = systemToKind[calc.system] ?? kind;
+    const resolvedKind = systemToKind[calc.system] ?? kind;
+    const resolvedCategory: Category = (calc.category as Category) ?? systemToCategory[calc.system] ?? (isRoofKind(resolvedKind) ? 'roof' : 'wall');
+    category = resolvedCategory;
+    kind = resolvedKind;
     if (typeof dims.width === 'number' && dims.width > 0) width = dims.width;
-    if (typeof dims.height === 'number' && dims.height > 0) height = dims.height;
-    const area = typeof dims.area === 'number' && dims.area >= 0 ? dims.area : width * height;
-    openings = round2(Math.max(0, width * height - area));
-    studSpacing = nearestSpacing(typeof cfg.studSpacing === 'number' && cfg.studSpacing > 0 ? cfg.studSpacing * 100 : studSpacing);
+    if (category === 'wall' && typeof dims.height === 'number' && dims.height > 0) height = dims.height;
+    const area = typeof dims.area === 'number' && dims.area >= 0 ? dims.area : width * (category === 'wall' ? height : 1);
+    if (category === 'wall') {
+      openings = round2(Math.max(0, width * height - area));
+    } else {
+      openings = 0;
+    }
+    if (typeof cfg.studSpacing === 'number' && cfg.studSpacing > 0) {
+      studSpacing = nearestSpacing(cfg.studSpacing * 100);
+    }
     withInsulation = cfg.insulation !== false;
     laborOn = true;
     step = 3;
@@ -208,7 +270,22 @@
     }
   }
 
-  function startWizard() {
+  function startWizard(selectedCategory: Category) {
+    category = selectedCategory;
+    if (selectedCategory === 'roof') {
+      kind = 'continuo';
+      width = 4;
+      height = 0;
+      openings = 0;
+      withInsulation = false;
+    } else {
+      kind = 'drywall';
+      width = 3.2;
+      height = 2.6;
+      openings = 0;
+      withInsulation = true;
+    }
+    step = 1;
     menu = 'wizard';
   }
 
@@ -217,21 +294,32 @@
     step = 1;
   }
 
-  const kinds = [
-    { id: 'drywall' as Kind, label: 'Pladur', subtitle: 'Ligero y rápido', icon: '▧' },
-    { id: 'block' as Kind, label: 'Block', subtitle: 'Resistente', icon: '▦' },
-    { id: 'ladrillo' as Kind, label: 'Ladrillo', subtitle: 'Tradicional', icon: '▤' }
+  const wallKinds: { id: WallKind; label: string; subtitle: string; icon: string }[] = [
+    { id: 'drywall', label: 'Pladur', subtitle: 'Ligero y rápido', icon: '▧' },
+    { id: 'block', label: 'Block', subtitle: 'Resistente', icon: '▦' },
+    { id: 'ladrillo', label: 'Ladrillo', subtitle: 'Tradicional', icon: '▤' }
   ];
 
-  function byId(id: string) {
-    return materials.materiales.find((item) => item.id === id)!;
+  const roofKinds: { id: RoofKind; label: string; subtitle: string; icon: string }[] = [
+    { id: 'continuo', label: 'Continuo', subtitle: 'Placa lisa con juntas', icon: '▭' },
+    { id: 'desmontable', label: 'Desmontable', subtitle: 'Perfilería T + paneles', icon: '▦' }
+  ];
+
+  const kinds: { id: Kind; label: string; subtitle: string; icon: string }[] = $derived(
+    (category as Category) === 'roof' ? roofKinds : wallKinds
+  );
+
+  function byId(id: string): Material {
+    const found = materials.materiales.find((item) => item.id === id);
+    if (!found) throw new Error(`Material no encontrado: ${id}`);
+    return found;
   }
 
   function ceilWithWaste(value: number, waste = 0) {
     return Math.ceil(value * (1 + waste));
   }
 
-  function calculate() {
+  function calculateWall(): { area: number; lines: Line[]; total: number; labor: number; hours: number; grandTotal: number } {
     const area = Math.max(0, width * height - openings);
     const lines: Line[] = [];
     if (kind === 'drywall') {
@@ -257,18 +345,104 @@
       lines.push({ material: structureScrews, quantity: Math.ceil((studCount * consumos.tornillosEstructuraPorMontante) / Number(structureScrews.udsPorEnvase)), total: 0, detail: structureScrews.formato });
       lines.push({ material: jointTape, quantity: Math.ceil((plateCount * consumos.cintaMetrosPorPlaca) / Number(jointTape.longitudM)), total: 0, detail: jointTape.formato });
       lines.push({ material: joint, quantity: Math.ceil((area * 2 * consumos.pastaKgPorM2Placa) / Number(joint.kgPorEnvase)), total: 0, detail: joint.formato });
-    } else {
-      const unit = byId(kind === 'block' ? 'bloque_hormigon_15' : 'ladrillo_hueco_doble');
+    } else if (kind === 'block' || kind === 'ladrillo') {
+      const wallKind: WallKind = kind;
+      const unit = byId(wallKind === 'block' ? 'bloque_hormigon_15' : 'ladrillo_hueco_doble');
       const mortar = byId('mortero_seco');
-      const consumos = materials.consumos[kind];
+      const consumos = materials.consumos[wallKind];
       lines.push({ material: unit, quantity: Math.ceil(area * consumos.udsPorM2 * (1 + consumos.desperdicio)), total: 0, detail: `${consumos.udsPorM2} uds./m² · ${unit.formato}` });
       lines.push({ material: mortar, quantity: Math.ceil((area * consumos.morteroKgPorM2) / Number(mortar.kgPorEnvase)), total: 0, detail: `${consumos.morteroKgPorM2} kg/m² · ${mortar.formato}` });
     }
+    return finalizeCalculation(area, lines);
+  }
+
+  function calculateRoof(): { area: number; lines: Line[]; total: number; labor: number; hours: number; grandTotal: number } {
+    const w = Math.max(0, width);
+    const d = Math.max(0, height);
+    const area = Math.max(0, w * d);
+    const lines: Line[] = [];
+    if (kind === 'continuo') {
+      const plates = byId('placa_yeso_estandar');
+      const omega = byId('perfil_omega_47');
+      const screws = byId('tornillos_placa');
+      const jointTape = byId('cinta_juntas');
+      const joint = byId('pasta_juntas');
+      const insulation = byId('lana_mineral');
+      const varilla = byId('varilla_roscada_m6');
+      const horquilla = byId('horquilla_cuelgue');
+      const taco = byId('taco_varilla_m6');
+      const tuerca = byId('tuerca_m6');
+      const consumos = materials.consumos.techo_continuo;
+      const separacion = consumos.separacionOmegaCm / 100;
+      const plateCount = Math.max(1, Math.ceil(ceilWithWaste(area, consumos.desperdicioPlacas) / Number(plates.superficieM2)));
+      const omegaRows = Math.max(1, Math.ceil(ceilWithWaste(w, consumos.desperdicioPerfiles) / separacion));
+      const omegasML = omegaRows * ceilWithWaste(d, consumos.desperdicioPerfiles);
+      const omegaCount = Math.max(1, Math.ceil(omegasML / Number(omega.longitudM)));
+      const cuelgues = Math.max(1, Math.ceil(area * consumos.cuelguePorM2));
+      lines.push({ material: plates, quantity: plateCount, total: 0, detail: `1 capa · ${plates.formato}` });
+      lines.push({ material: omega, quantity: omegaCount, total: 0, detail: `Perfil omega cada ${consumos.separacionOmegaCm} cm` });
+      lines.push({ material: varilla, quantity: cuelgues, total: 0, detail: `Cuelgues cada ≈${(1 / consumos.cuelguePorM2).toFixed(2)} m²` });
+      lines.push({ material: horquilla, quantity: cuelgues, total: 0, detail: 'Horquilla M6 para omega' });
+      lines.push({ material: taco, quantity: cuelgues, total: 0, detail: 'Taco metálico M6 al forjado' });
+      lines.push({ material: tuerca, quantity: cuelgues * 2, total: 0, detail: '2 tuercas por cuelgue (seguro + regulación)' });
+      if (withInsulation) {
+        lines.push({ material: insulation, quantity: Math.max(1, Math.ceil(area / Number(insulation.superficieM2))), total: 0, detail: 'Aislamiento sobre placa' });
+      }
+      lines.push({ material: screws, quantity: Math.max(1, Math.ceil((area * consumos.tornillosPorM2Placa) / Number(screws.udsPorEnvase))), total: 0, detail: screws.formato });
+      lines.push({ material: jointTape, quantity: Math.max(1, Math.ceil((plateCount * consumos.cintaMetrosPorPlaca) / Number(jointTape.longitudM))), total: 0, detail: jointTape.formato });
+      lines.push({ material: joint, quantity: Math.max(1, Math.ceil((area * consumos.pastaKgPorM2Placa) / Number(joint.kgPorEnvase))), total: 0, detail: joint.formato });
+    } else if (kind === 'desmontable') {
+      const primario = byId('perfil_T_primario_24');
+      const secundarioLargo = byId('perfil_T_secundario_24');
+      const secundarioCorto = byId('perfil_T_secundario_24_largo');
+      const angular = byId('perfil_angular_T24');
+      const varilla = byId('varilla_roscada_m6');
+      const taco = byId('taco_varilla_m6');
+      const clip = byId('clip_cuelgue_T');
+      const panel = byId('panel_acustico_60x60');
+      const consumos = materials.consumos.techo_desmontable;
+      const sepPrimario = consumos.separacionPrimarioCm / 100;
+      const sepSecundario = consumos.separacionSecundarioCm / 100;
+      const numPrimarios = Math.max(1, Math.ceil(ceilWithWaste(w, consumos.desperdicioPerfiles) / sepPrimario));
+      const primaryLineal = numPrimarios * ceilWithWaste(d, consumos.desperdicioPerfiles);
+      const primarioCount = Math.max(1, Math.ceil(primaryLineal / Number(primario.longitudM)));
+      const numCeldasLargo = Math.max(1, Math.ceil(ceilWithWaste(d, consumos.desperdicioPerfiles) / sepSecundario));
+      const secundarioLargoCount = Math.max(1, Math.ceil((numPrimarios * Math.ceil(numCeldasLargo / 2)) * (1 + consumos.desperdicioPerfiles)));
+      const secundarioCortoCount = Math.max(1, Math.ceil((numPrimarios * Math.floor(numCeldasLargo / 2)) * (1 + consumos.desperdicioPerfiles)));
+      const angularML = 2 * (ceilWithWaste(w, consumos.desperdicioPerfiles) + ceilWithWaste(d, consumos.desperdicioPerfiles));
+      const angularCount = Math.max(1, Math.ceil(angularML / Number(angular.longitudM)));
+      const cuelgues = Math.max(1, Math.ceil(area * consumos.cuelguePorM2));
+      const panelesCount = Math.max(1, Math.ceil(ceilWithWaste(area, consumos.desperdicioPaneles) / Number(panel.superficieM2)));
+      lines.push({ material: primario, quantity: primarioCount, total: 0, detail: `Perfil T primario cada ${consumos.separacionPrimarioCm} cm` });
+      lines.push({ material: secundarioLargo, quantity: secundarioLargoCount, total: 0, detail: 'Secundario largo 1,2 m' });
+      lines.push({ material: secundarioCorto, quantity: secundarioCortoCount, total: 0, detail: 'Secundario corto 0,6 m' });
+      lines.push({ material: angular, quantity: angularCount, total: 0, detail: 'Perfil angular perimetral' });
+      lines.push({ material: varilla, quantity: cuelgues, total: 0, detail: 'Cuelgue con varilla M6' });
+      lines.push({ material: taco, quantity: cuelgues, total: 0, detail: 'Taco metálico M6 al forjado' });
+      lines.push({ material: clip, quantity: cuelgues, total: 0, detail: 'Clip con muelle para T24' });
+      lines.push({ material: panel, quantity: panelesCount, total: 0, detail: 'Panel acústico 600 × 600 mm' });
+    }
+    return finalizeCalculation(area, lines);
+  }
+
+  function getLaborInfo() {
+    const laborKey = systemLabel(kind) as keyof typeof materials.manoObra;
+    return materials.manoObra[laborKey] ?? materials.manoObra.drywall;
+  }
+
+  function finalizeCalculation(area: number, lines: Line[]) {
     lines.forEach((line) => (line.total = line.quantity * line.material.precio));
-    const laborRate = materials.manoObra[kind].precioM2;
+    const laborInfo = getLaborInfo();
+    const laborRate = laborInfo.precioM2;
     const labor = laborOn ? area * laborRate : 0;
-    const hours = Math.max(1, (area / materials.manoObra[kind].m2PorDia) * 8);
-    return { area, lines, total: lines.reduce((sum, line) => sum + line.total, 0), labor, hours, grandTotal: lines.reduce((sum, line) => sum + line.total, 0) + labor };
+    const hours = Math.max(1, (area / laborInfo.m2PorDia) * 8);
+    const total = lines.reduce((sum, line) => sum + line.total, 0);
+    return { area, lines, total, labor, hours, grandTotal: total + labor };
+  }
+
+  function calculate() {
+    if (category === 'roof') return calculateRoof();
+    return calculateWall();
   }
 
   let result = $derived(calculate());
@@ -279,7 +453,10 @@
 
   function next() { if (step < 3) step = (step + 1) as 1 | 2 | 3; }
   function back() { if (step > 1) step = (step - 1) as 1 | 2 | 3; }
-  function reset() { width = 3.2; height = 2.6; openings = 0; thickness = 'M48'; studSpacing = 60; withInsulation = true; laborOn = true; step = 1; menu = 'home'; projectId = ''; createdAt = ''; }
+  function reset() {
+    width = 3.2; height = 2.6; openings = 0; thickness = 'M48'; studSpacing = 60; withInsulation = true; laborOn = true;
+    category = 'wall'; kind = 'drywall'; roofDropCm = 10; step = 1; menu = 'home'; projectId = ''; createdAt = '';
+  }
 </script>
 
 <svelte:head>
@@ -296,7 +473,7 @@
         <p class="eyebrow menu-eyebrow">¿QUÉ QUIERES CONSTRUIR?</p>
         <div class="menu-list">
           {#each menuItems as item}
-            <button class="menu-card" class:enabled={item.available} disabled={!item.available} onclick={() => item.available && startWizard()}>
+            <button class="menu-card" class:enabled={item.available} disabled={!item.available} onclick={() => item.available && startWizard(item.id === 'roof' ? 'roof' : 'wall')}>
               <span class="menu-icon" aria-hidden="true">
                 {#if item.icon === 'wall'}
                   <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 26h20M6 22h20M6 18h20M6 14h20M6 10h20M6 6h20"/></svg>
@@ -346,10 +523,12 @@
 
     {#if step === 1}
       <section class="card step-pane">
-        <div class="section-heading"><div><p class="eyebrow">PASO 01</p><h2>¿Qué vas a construir?</h2></div><span class="step-badge">1/3</span></div>
+        <div class="section-heading"><div><p class="eyebrow">PASO 01</p><h2>{category === 'roof' ? '¿Qué tipo de techo?' : '¿Qué vas a construir?'}</h2></div><span class="step-badge">1/3</span></div>
         <div class="kind-grid">{#each kinds as option}<button class:chosen={kind === option.id} class="kind" onclick={() => { kind = option.id; }}><span class="kind-icon">{option.icon}</span><strong>{option.label}</strong><small>{option.subtitle}</small>{#if kind === option.id}<b class="check">✓</b>{/if}</button>{/each}</div>
         {#if kind === 'drywall'}<label class="select-label">TIPO DE SISTEMA <select bind:value={thickness}><option>M48</option><option>M70</option><option>M90</option></select></label>{/if}
         {#if kind === 'drywall'}<label class="select-label">SEPARACIÓN ENTRE MONTANTES <select bind:value={studSpacing}><option value={40}>40 cm</option><option value={50}>50 cm</option><option value={60}>60 cm</option><option value={80}>80 cm</option></select></label>{/if}
+        {#if kind === 'continuo'}<label class="select-label">CAÍDA DEL TECHO <div class="stepper-input"><button onclick={() => roofDropCm = Math.max(0, roofDropCm - 1)}>−</button><input type="number" min="0" max="50" step="1" bind:value={roofDropCm} /><button onclick={() => roofDropCm = Math.min(50, roofDropCm + 1)}>+</button></div><small class="hint">Distancia entre forjado y placa (cm). Se calcula con varilla M6 estándar.</small></label>{/if}
+        {#if category === 'roof'}<label class="toggle"><input type="checkbox" bind:checked={withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento sobre el techo</span></label>{/if}
         {#if kind === 'drywall'}<label class="toggle"><input type="checkbox" bind:checked={withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento interior</span></label>{/if}
         <label class="toggle"><input type="checkbox" bind:checked={laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
         <div class="step-nav"><span></span><button class="primary" onclick={next}>Siguiente →</button></div>
@@ -358,15 +537,31 @@
 
     {#if step === 2}
       <section class="card step-pane">
-        <div class="section-heading"><div><p class="eyebrow">PASO 02</p><h2>Introduce las medidas</h2></div><span class="step-badge muted">2/3</span></div>
+        <div class="section-heading"><div><p class="eyebrow">PASO 02</p><h2>{category === 'roof' ? 'Medidas del techo' : 'Introduce las medidas'}</h2></div><span class="step-badge muted">2/3</span></div>
         <div class="fields">
-          <label><span>ANCHO <small>metros</small></span><div class="stepper-input"><button onclick={() => width = Math.max(0.1, +(width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={width} /><button onclick={() => width = +(width + 0.1).toFixed(2)}>+</button></div></label>
+          <label><span>{category === 'roof' ? 'LARGO' : 'ANCHO'} <small>metros</small></span><div class="stepper-input"><button onclick={() => width = Math.max(0.1, +(width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={width} /><button onclick={() => width = +(width + 0.1).toFixed(2)}>+</button></div></label>
           <span class="times">×</span>
-          <label><span>ALTO <small>metros</small></span><div class="stepper-input"><button onclick={() => height = Math.max(0.1, +(height - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={height} /><button onclick={() => height = +(height + 0.1).toFixed(2)}>+</button></div></label>
+          <label><span>{category === 'roof' ? 'ANCHO' : 'ALTO'} <small>metros</small></span><div class="stepper-input"><button onclick={() => height = Math.max(0.1, +(height - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={height} /><button onclick={() => height = +(height + 0.1).toFixed(2)}>+</button></div></label>
         </div>
-        <label class="opening-field"><span>HUECOS (PUERTAS / VENTANAS) <small>m² a descontar</small></span><div class="stepper-input"><button onclick={() => openings = Math.max(0, +(openings - 0.1).toFixed(2))}>−</button><input type="number" min="0" step="0.1" bind:value={openings} /><button onclick={() => openings = +(openings + 0.1).toFixed(2)}>+</button></div></label>
-        <div class="presets"><span>Preset:</span><button onclick={() => { width = 3; height = 2.5; openings = 1.8; }}>Habitación</button><button onclick={() => { width = 1.2; height = 2.6; openings = 0; }}>Pasillo</button><button onclick={() => { width = 5; height = 3; openings = 2.5; }}>Salón grande</button></div>
-        <div class="area-note"><span>▧</span><strong>Superficie a cubrir</strong><b>{result.area.toFixed(2)} m²</b></div>
+        {#if category === 'wall'}
+          <label class="opening-field"><span>HUECOS (PUERTAS / VENTANAS) <small>m² a descontar</small></span><div class="stepper-input"><button onclick={() => openings = Math.max(0, +(openings - 0.1).toFixed(2))}>−</button><input type="number" min="0" step="0.1" bind:value={openings} /><button onclick={() => openings = +(openings + 0.1).toFixed(2)}>+</button></div></label>
+        {:else}
+          <p class="hint roof-hint">Mide largo y ancho del techo. Se descuentan huecos de placas / luminarias con un 5% extra de material.</p>
+        {/if}
+        <div class="presets">
+          <span>Preset:</span>
+          {#if category === 'wall'}
+            <button onclick={() => { width = 3; height = 2.5; openings = 1.8; }}>Habitación</button>
+            <button onclick={() => { width = 1.2; height = 2.6; openings = 0; }}>Pasillo</button>
+            <button onclick={() => { width = 5; height = 3; openings = 2.5; }}>Salón grande</button>
+          {:else}
+            <button onclick={() => { width = 3.5; height = 4; }}>Habitación</button>
+            <button onclick={() => { width = 1.5; height = 4; }}>Pasillo</button>
+            <button onclick={() => { width = 5; height = 6; }}>Salón grande</button>
+            <button onclick={() => { width = 8; height = 4; }}>Cocina office</button>
+          {/if}
+        </div>
+        <div class="area-note"><span>{category === 'roof' ? '▭' : '▧'}</span><strong>Superficie a cubrir</strong><b>{result.area.toFixed(2)} m²</b></div>
         <div class="step-nav"><button class="ghost" onclick={back}>← Atrás</button><button class="primary" onclick={next}>Calcular →</button></div>
       </section>
     {/if}
@@ -377,20 +572,20 @@
           <div>
             <p class="eyebrow light">ESTIMACIÓN DEL PROYECTO</p>
             <h2>{projectName || 'Tu lista de compra'}</h2>
-            <p>Pared de {result.area.toFixed(2)} m² · {kinds.find((item) => item.id === kind)?.label}</p>
+            <p>{category === 'roof' ? 'Techo' : 'Pared'} de {result.area.toFixed(2)} m² · {systemPrettyLabel(kind)}</p>
           </div>
           <span class="step-badge light-badge">3/3</span>
         </div>
         <div class="stats">
           <div><span>Materiales</span><strong>{euro(result.total)}</strong><small>Precios estimados</small></div>
-          {#if laborOn}<div><span>Mano de obra</span><strong>{euro(result.labor)}</strong><small>{materials.manoObra[kind].precioM2} €/m²</small></div>{/if}
+          {#if laborOn}<div><span>Mano de obra</span><strong>{euro(result.labor)}</strong><small>{getLaborInfo().precioM2} €/m²</small></div>{/if}
           <div><span>Total</span><strong>{euro(result.grandTotal)}</strong><small>Materiales + obra</small></div>
           <div><span>Tiempo</span><strong>{result.hours.toFixed(1)} h</strong><small>Rendimiento orientativo</small></div>
         </div>
         <div class="shopping-list">
           {#each result.lines as line}
             <div class="material-row">
-              <div class="material-icon">{line.material.categoria === 'drywall' ? '▧' : '▤'}</div>
+              <div class="material-icon">{line.material.categoria === 'techo' ? '▭' : line.material.categoria === 'drywall' ? '▧' : '▤'}</div>
               <div class="material-name"><strong>{line.material.nombre}</strong><small>{line.detail} · {euro(line.material.precio)} / {line.material.unidad}</small></div>
               <b class="qty">{line.quantity} {line.material.unidad === 'unidad' ? 'uds.' : line.material.unidad}s</b>
               <span class="price">{euro(line.total)}</span>
@@ -557,6 +752,13 @@
   .stepper-input input::-webkit-outer-spin-button, .stepper-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin:0; }
   .times {color:#bdc6c7;text-align:center;padding-bottom:12px;font-size:20px;}
   .opening-field {max-width:480px;margin-top:16px;}
+
+  .hint { display:block; margin-top:6px; font-size:11px; color:#79878c; line-height:1.4; }
+  .roof-hint { max-width:480px; margin-top:14px; padding:10px 12px; background:#f6f9e9; border-radius:9px; color:#54620e; font-size:12px; }
+  :global(body.dark) .roof-hint { background:#1d2a17; color:#c8db7a; }
+  .select-label .stepper-input { margin-top:6px; width:240px; }
+  .select-label .stepper-input input { padding:9px 0; font-size:14px; }
+  .select-label .stepper-input button { padding:9px 10px; font-size:14px; }
 
   .presets { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; align-items:center; }
   .presets > span { font-size:10px; font-weight:800; color:#87949a; letter-spacing:1px; }

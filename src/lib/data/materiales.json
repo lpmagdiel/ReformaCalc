@@ -164,6 +164,122 @@
 			"precio": 1.94,
 			"kgPorEnvase": 17,
 			"fuente": "obramat.es (archive.org, ene-2026)"
+		},
+		{
+			"id": "perfil_omega_47",
+			"nombre": "Perfil omega galvanizado 47 mm (estructura falso techo continuo)",
+			"categoria": "techo",
+			"formato": "3 m",
+			"unidad": "ud",
+			"precio": 3.85,
+			"longitudM": 3.0,
+			"fuente": "obramat.es (archive.org, nov-2025); precio referencia 3,50-4,20 €/ud"
+		},
+		{
+			"id": "varilla_roscada_m6",
+			"nombre": "Varilla roscada M6 zincada 1 m",
+			"categoria": "techo",
+			"formato": "barra 1 m",
+			"unidad": "ud",
+			"precio": 0.95,
+			"longitudM": 1.0,
+			"fuente": "obramat.es (archive.org, nov-2025); pack 10 uds ≈ 9,50 €"
+		},
+		{
+			"id": "horquilla_cuelgue",
+			"nombre": "Horquilla de cuelgue M6 para perfil omega",
+			"categoria": "techo",
+			"formato": "ud",
+			"unidad": "ud",
+			"precio": 0.32,
+			"fuente": "obramat.es (archive.org, nov-2025); pack 100 uds ≈ 28-35 €"
+		},
+		{
+			"id": "taco_varilla_m6",
+			"nombre": "Taco de expansión metálico M6×40 con arandela y tuerca",
+			"categoria": "techo",
+			"formato": "ud",
+			"unidad": "ud",
+			"precio": 0.28,
+			"fuente": "obramat.es (archive.org, nov-2025); pack 50 uds ≈ 13-15 €"
+		},
+		{
+			"id": "tuerca_m6",
+			"nombre": "Tuerca hexagonal M6 zincada",
+			"categoria": "techo",
+			"formato": "ud",
+			"unidad": "ud",
+			"precio": 0.06,
+			"fuente": "obramat.es (archive.org, nov-2025); pack 100 uds ≈ 5-7 €"
+		},
+		{
+			"id": "perfil_T_primario_24",
+			"nombre": "Perfil T primario 24×38 mm (falso techo desmontable) blanco",
+			"categoria": "techo",
+			"formato": "3,6 m",
+			"unidad": "ud",
+			"precio": 4.95,
+			"longitudM": 3.6,
+			"fuente": "obramat.es (archive.org, oct-2025); primario T24 Click 3,6 m"
+		},
+		{
+			"id": "perfil_T_secundario_24",
+			"nombre": "Perfil T secundario 24×32 mm (falso techo desmontable) 1,2 m",
+			"categoria": "techo",
+			"formato": "1,2 m",
+			"unidad": "ud",
+			"precio": 2.15,
+			"longitudM": 1.2,
+			"fuente": "obramat.es (archive.org, oct-2025); secundario corto T24 1,2 m"
+		},
+		{
+			"id": "perfil_T_secundario_24_largo",
+			"nombre": "Perfil T secundario 24×32 mm (falso techo desmontable) 0,6 m",
+			"categoria": "techo",
+			"formato": "0,6 m",
+			"unidad": "ud",
+			"precio": 1.25,
+			"longitudM": 0.6,
+			"fuente": "obramat.es (archive.org, oct-2025); secundario corto T24 0,6 m"
+		},
+		{
+			"id": "perfil_angular_T24",
+			"nombre": "Perfil angular perimetral 24×24 mm (falso techo desmontable) blanco",
+			"categoria": "techo",
+			"formato": "3 m",
+			"unidad": "ud",
+			"precio": 2.65,
+			"longitudM": 3.0,
+			"fuente": "obramat.es (archive.org, oct-2025); angular 24×24 3 m"
+		},
+		{
+			"id": "clip_cuelgue_T",
+			"nombre": "Clip de cuelgue con muelle para perfil T24",
+			"categoria": "techo",
+			"formato": "ud",
+			"unidad": "ud",
+			"precio": 0.45,
+			"fuente": "obramat.es (archive.org, oct-2025); pack 50 uds ≈ 20-25 €"
+		},
+		{
+			"id": "panel_acustico_60x60",
+			"nombre": "Panel acústico lana mineral 600×600×15 mm (falso techo registrable)",
+			"categoria": "techo",
+			"formato": "panel 0,36 m²",
+			"unidad": "ud",
+			"precio": 4.35,
+			"superficieM2": 0.36,
+			"fuente": "obramat.es (archive.org, oct-2025); AMF Thermatex 600×600"
+		},
+		{
+			"id": "tornillo_techo_metal",
+			"nombre": "Tornillo metal-metal 3,5×9,5 mm (caja 500 ud) estructura techo",
+			"categoria": "techo",
+			"formato": "caja 500 ud",
+			"unidad": "caja",
+			"precio": 3.12,
+			"udsPorEnvase": 500,
+			"fuente": "obramat.es (archive.org, sep-2025)"
 		}
 	],
 	"manoObra": {
@@ -184,6 +300,18 @@
 			"m2PorDia": 10,
 			"cuadrilla": "albañil + peón",
 			"fuente": "CYPE FFQ010 (13,15 €/m²) y preciom2 (8-12 m²/día)"
+		},
+		"techo_continuo": {
+			"precioM2": 24.0,
+			"m2PorDia": 15,
+			"cuadrilla": "2 montadores",
+			"fuente": "preciom2.com (2025): 22-30 €/m² falso techo continuo; Placo/Knauf: 12-18 m²/día por montador"
+		},
+		"techo_desmontable": {
+			"precioM2": 18.0,
+			"m2PorDia": 22,
+			"cuadrilla": "1 montador",
+			"fuente": "preciom2.com (2025): 15-22 €/m² registrable; AMF/Knauf: 20-30 m²/día"
 		}
 	},
 	"consumos": {
@@ -203,6 +331,24 @@
 			"udsPorM2": 32,
 			"desperdicio": 0.07,
 			"morteroKgPorM2": 12
+		},
+		"techo_continuo": {
+			"desperdicioPlacas": 0.1,
+			"separacionOmegaCm": 60,
+			"tornillosPorM2Placa": 20,
+			"pastaKgPorM2Placa": 0.45,
+			"cintaMetrosPorPlaca": 3.7,
+			"cuelguePorM2": 1.1,
+			"longitudVarillaM": 0.5,
+			"desperdicioPerfiles": 0.08
+		},
+		"techo_desmontable": {
+			"separacionPrimarioCm": 120,
+			"separacionSecundarioCm": 60,
+			"cuelguePorM2": 0.7,
+			"longitudVarillaM": 0.5,
+			"desperdicioPerfiles": 0.08,
+			"desperdicioPaneles": 0.05
 		}
 	}
 }

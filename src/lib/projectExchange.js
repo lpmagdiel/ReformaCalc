@@ -63,7 +63,19 @@ const SHORT_NAMES = {
   mortero_seco: 'Mortero seco',
   cemento: 'Cemento',
   arena: 'Arena',
-  yeso_construccion: 'Yeso'
+  yeso_construccion: 'Yeso',
+  perfil_omega_47: 'Perfil omega 47',
+  varilla_roscada_m6: 'Varilla M6',
+  horquilla_cuelgue: 'Horquilla cuelgue',
+  taco_varilla_m6: 'Taco M6',
+  tuerca_m6: 'Tuerca M6',
+  perfil_T_primario_24: 'Perfil T primario',
+  perfil_T_secundario_24: 'Perfil T secundario 1,2',
+  perfil_T_secundario_24_largo: 'Perfil T secundario 0,6',
+  perfil_angular_T24: 'Angular T24',
+  clip_cuelgue_T: 'Clip cuelgue T',
+  panel_acustico_60x60: 'Panel acústico',
+  tornillo_techo_metal: 'Tornillos techo'
 };
 
 // ---------------------------------------------------------------------------
