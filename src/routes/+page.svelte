@@ -1,44 +1,75 @@
 <script lang="ts">
-  import materials from '$lib/data/materiales.json';
+  import {
+    catalog,
+    material as materialById,
+    manoObra as manoObraBySistema,
+    meta as catalogMeta,
+    materiales,
+    materialesPorSistema
+  } from '$lib/data/db';
   import { downloadProject, copyProjectToClipboard, importProject } from '$lib/projectExchange.js';
   import type { ReformaCalcProject } from '$lib/projectExchange.js';
   import { downloadData, copyToClipboardData } from '$lib/exporters/exportManager.js';
+  import { onMount } from 'svelte';
+  import type { Categoria, Material, Sistema } from '$lib/calc/types';
+  import {
+    calculateWall,
+    WALL_DEFAULTS,
+    type WallKind,
+    type WallOptions,
+    type WallThickness
+  } from '$lib/calc/wall';
+  import {
+    calculateRoof,
+    ROOF_DEFAULTS,
+    type RoofKind,
+    type RoofOptions
+  } from '$lib/calc/roof';
+  import {
+    calculateFloor,
+    FLOOR_DEFAULTS,
+    type FloorKind,
+    type FloorOptions,
+    type FloorSurface,
+    type AdhesiveType,
+    type UnderlaymentType
+  } from '$lib/calc/floor';
+  import {
+    calculateBath,
+    BATH_DEFAULTS,
+    type BathOptions
+  } from '$lib/calc/bath';
+  import type { CalculationResult, Line } from '$lib/calc/calc';
 
-  type Category = 'wall' | 'roof';
-  type Kind = 'drywall' | 'block' | 'ladrillo' | 'continuo' | 'desmontable';
-  type WallKind = 'drywall' | 'block' | 'ladrillo';
-  type RoofKind = 'continuo' | 'desmontable';
-  type Material = (typeof materials.materiales)[number];
-  type Line = { material: Material; quantity: number; total: number; detail: string };
+  type Category = 'wall' | 'roof' | 'floor' | 'bath';
+  type Kind = WallKind | RoofKind | FloorKind | 'bano';
+  type WizardOptions = WallOptions | RoofOptions | FloorOptions | BathOptions;
 
   type MenuItem = {
-    id: 'wall' | 'roof' | 'floor' | 'bath';
+    id: Category;
     title: string;
     subtitle: string;
-    available: boolean;
     icon: 'wall' | 'roof' | 'floor' | 'bath';
   };
 
   const menuItems: MenuItem[] = [
-    { id: 'wall', title: 'Pared simple', subtitle: 'Tabique de drywall, bloque o ladrillo', available: true, icon: 'wall' },
-    { id: 'roof', title: 'Techo', subtitle: 'Falso techo continuo o desmontable', available: true, icon: 'roof' },
-    { id: 'floor', title: 'Suelo', subtitle: 'Tarima, cerámica o microcemento', available: false, icon: 'floor' },
-    { id: 'bath', title: 'Baño completo', subtitle: 'Reforma integral de baño', available: false, icon: 'bath' }
+    { id: 'wall', title: 'Pared simple', subtitle: 'Tabique de drywall, bloque o ladrillo', icon: 'wall' },
+    { id: 'roof', title: 'Techo', subtitle: 'Falso techo continuo o desmontable', icon: 'roof' },
+    { id: 'floor', title: 'Suelo', subtitle: 'Tarima, cerámica o microcemento', icon: 'floor' },
+    { id: 'bath', title: 'Baño completo', subtitle: 'Reforma integral de baño', icon: 'bath' }
   ];
 
   let menu: 'home' | 'wizard' = $state('home');
-
   let step: 1 | 2 | 3 = $state(1);
   let category: Category = $state('wall');
   let kind: Kind = $state('drywall');
-  let width: number = $state(3.2);
-  let height: number = $state(2.6);
-  let openings: number = $state(0);
-  let thickness: 'M48' | 'M70' | 'M90' = $state('M48');
-  let studSpacing: 40 | 50 | 60 | 80 = $state(60);
-  let withInsulation = $state(true);
-  let laborOn = $state(true);
-  let roofDropCm: number = $state(10);
+
+  // Estado común del wizard
+  let wallOptions: WallOptions = $state({ ...WALL_DEFAULTS });
+  let roofOptions: RoofOptions = $state({ ...ROOF_DEFAULTS });
+  let floorOptions: FloorOptions = $state({ ...FLOOR_DEFAULTS });
+  let bathOptions: BathOptions = $state({ ...BATH_DEFAULTS });
+
   let projectName = $state('Pared salón');
   let projectId = $state('');
   let createdAt = $state('');
@@ -63,22 +94,201 @@
     }
   }
 
-  function systemLabel(kind: Kind): string {
-    switch (kind) {
-      case 'drywall': return 'pladur';
-      case 'block': return 'bloque';
-      case 'ladrillo': return 'ladrillo';
-      case 'continuo': return 'techo_continuo';
-      case 'desmontable': return 'techo_desmontable';
+  const STORAGE_KEY = 'reformacalc:draft';
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function draftSnapshot() {
+    return {
+      projectId,
+      createdAt,
+      projectName,
+      category,
+      kind,
+      wallOptions,
+      roofOptions,
+      floorOptions,
+      bathOptions,
+      savedAt: new Date().toISOString()
+    };
+  }
+
+  function persistDraft() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(draftSnapshot()));
+    } catch {
+      /* cuota llena o sin localStorage */
     }
   }
 
-  function isRoofKind(kind: Kind): kind is RoofKind {
-    return kind === 'continuo' || kind === 'desmontable';
+  function schedulePersist() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistDraft, 400);
   }
 
-  function isWallKind(kind: Kind): kind is WallKind {
-    return kind === 'drywall' || kind === 'block' || kind === 'ladrillo';
+  function restoreDraft(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      projectId = d.projectId ?? '';
+      createdAt = d.createdAt ?? '';
+      projectName = d.projectName ?? projectName;
+      category = d.category ?? 'wall';
+      kind = d.kind ?? 'drywall';
+      if (d.wallOptions) wallOptions = { ...WALL_DEFAULTS, ...d.wallOptions };
+      if (d.roofOptions) roofOptions = { ...ROOF_DEFAULTS, ...d.roofOptions };
+      if (d.floorOptions) floorOptions = { ...FLOOR_DEFAULTS, ...d.floorOptions };
+      if (d.bathOptions) bathOptions = { ...BATH_DEFAULTS, ...d.bathOptions };
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function clearDraft() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* noop */
+    }
+  }
+
+  $effect(() => {
+    void projectName;
+    void category;
+    void kind;
+    void wallOptions;
+    void roofOptions;
+    void floorOptions;
+    void bathOptions;
+    schedulePersist();
+  });
+
+  const APP_METADATA = {
+    app: 'ReformaCalc',
+    appVersion: '1.3',
+    currency: catalogMeta().moneda,
+    language: 'es'
+  };
+
+  const spacingOptions: (40 | 50 | 60 | 80)[] = [40, 50, 60, 80];
+
+  function nearestSpacing(cm: number): 40 | 50 | 60 | 80 {
+    return spacingOptions.reduce((best, s) => (Math.abs(s - cm) < Math.abs(best - cm) ? s : best), spacingOptions[0]);
+  }
+
+  function startWizard(selectedCategory: Category) {
+    category = selectedCategory;
+    if (selectedCategory === 'roof') {
+      roofOptions = { ...ROOF_DEFAULTS };
+      kind = 'continuo';
+    } else if (selectedCategory === 'floor') {
+      floorOptions = { ...FLOOR_DEFAULTS };
+      kind = 'tarima';
+    } else if (selectedCategory === 'bath') {
+      bathOptions = { ...BATH_DEFAULTS };
+      kind = 'bano';
+    } else {
+      wallOptions = { ...WALL_DEFAULTS };
+      kind = 'drywall';
+    }
+    step = 1;
+    menu = 'wizard';
+  }
+
+  function goHome() {
+    menu = 'home';
+    step = 1;
+  }
+
+  function reset() {
+    wallOptions = { ...WALL_DEFAULTS };
+    roofOptions = { ...ROOF_DEFAULTS };
+    floorOptions = { ...FLOOR_DEFAULTS };
+    bathOptions = { ...BATH_DEFAULTS };
+    category = 'wall';
+    kind = 'drywall';
+    step = 1;
+    menu = 'home';
+    projectId = '';
+    createdAt = '';
+    clearDraft();
+  }
+
+  onMount(() => {
+    if (loadFromUrl()) {
+      showToast('Proyecto cargado desde enlace.');
+    } else if (restoreDraft()) {
+      showToast('Borrador restaurado del almacenamiento local.');
+    }
+  });
+
+  const wallKinds: { id: WallKind; label: string; subtitle: string; icon: string }[] = [
+    { id: 'drywall', label: 'Pladur', subtitle: 'Ligero y rápido', icon: '▧' },
+    { id: 'block', label: 'Block', subtitle: 'Resistente', icon: '▦' },
+    { id: 'ladrillo', label: 'Ladrillo', subtitle: 'Tradicional', icon: '▤' }
+  ];
+
+  const roofKinds: { id: RoofKind; label: string; subtitle: string; icon: string }[] = [
+    { id: 'continuo', label: 'Continuo', subtitle: 'Placa lisa con juntas', icon: '▭' },
+    { id: 'desmontable', label: 'Desmontable', subtitle: 'Perfilería T + paneles', icon: '▦' }
+  ];
+
+  const floorKinds: { id: FloorKind; label: string; subtitle: string; icon: string }[] = [
+    { id: 'tarima', label: 'Tarima', subtitle: 'Laminada o madera', icon: '▤' },
+    { id: 'ceramica', label: 'Cerámica', subtitle: 'Gres o azulejo', icon: '▦' },
+    { id: 'microcemento', label: 'Microcemento', subtitle: 'Continuo sin juntas', icon: '▭' }
+  ];
+
+  let kinds = $derived.by(() => {
+    const cat: Category = category;
+    if (cat === 'roof') return roofKinds;
+    if (cat === 'floor') return floorKinds;
+    if (cat === 'bath') return [{ id: 'bano' as const, label: 'Integral', subtitle: 'Todos los bloques', icon: '▭' }];
+    return wallKinds;
+  });
+
+  let result: CalculationResult = $derived.by(() => {
+    if (category === 'wall') return calculateWall(wallOptions);
+    if (category === 'roof') return calculateRoof(roofOptions);
+    if (category === 'floor') return calculateFloor(floorOptions);
+    return calculateBath(bathOptions);
+  });
+
+  function euro(value: number) {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: catalogMeta().moneda }).format(value);
+  }
+
+  function iconForCategoria(cat: Categoria): string {
+    if (cat === 'panel' || cat === 'baldosa' || cat === 'azulejo' || cat === 'suelo') return '▭';
+    if (cat === 'placa' || cat === 'perfil') return '▧';
+    if (cat === 'sanitario' || cat === 'mueble') return '◆';
+    if (cat === 'pintura' || cat === 'demolicion') return '◇';
+    return '▤';
+  }
+
+  function systemLabel(kind: Kind): Sistema {
+    switch (kind) {
+      case 'drywall':
+      case 'block':
+      case 'ladrillo':
+        return kind;
+      case 'continuo':
+        return 'techo_continuo';
+      case 'desmontable':
+        return 'techo_desmontable';
+      case 'tarima':
+        return 'tarima';
+      case 'ceramica':
+        return 'ceramica';
+      case 'microcemento':
+        return 'microcemento';
+      case 'bano':
+        return 'bano_alicatado';
+    }
   }
 
   function systemPrettyLabel(kind: Kind): string {
@@ -88,23 +298,113 @@
       case 'ladrillo': return 'Ladrillo';
       case 'continuo': return 'Falso techo continuo';
       case 'desmontable': return 'Falso techo desmontable';
+      case 'tarima': return 'Tarima';
+      case 'ceramica': return 'Cerámica';
+      case 'microcemento': return 'Microcemento';
+      case 'bano': return 'Reforma integral de baño';
+    }
+  }
+
+  function categoryPrettyName(): string {
+    switch (category) {
+      case 'wall': return 'Pared';
+      case 'roof': return 'Techo';
+      case 'floor': return 'Suelo';
+      case 'bath': return 'Baño';
+    }
+  }
+
+  const HISTORY_KEY = 'reformacalc:history';
+  const MAX_HISTORY = 30;
+
+  function pushHistory() {
+    if (typeof localStorage === 'undefined') return;
+    ensureProjectIdentity();
+    const summary = {
+      id: projectId,
+      name: projectName,
+      category,
+      system: systemLabel(kind),
+      area: result.area,
+      totalCost: result.grandTotal,
+      materialsCost: result.total,
+      laborCost: result.labor,
+      hours: result.hours,
+      createdAt,
+      savedAt: new Date().toISOString(),
+      snapshot: ''
+    };
+    try {
+      const snapshot = {
+        v: 1,
+        category,
+        kind,
+        projectName,
+        wallOptions,
+        roofOptions,
+        floorOptions,
+        bathOptions
+      };
+      const json = JSON.stringify(snapshot);
+      summary.snapshot = btoa(unescape(encodeURIComponent(json)));
+    } catch {
+      /* noop */
+    }
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      const filtered = list.filter((p) => p.id !== summary.id);
+      filtered.unshift(summary);
+      const trimmed = filtered.slice(0, MAX_HISTORY);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* cuota llena */
     }
   }
 
   function buildProject() {
     ensureProjectIdentity();
-    const dims = category === 'roof' ? { width, height: 0, area: result.area } : { width, height, area: result.area };
+    const dims =
+      category === 'wall'
+        ? { width: wallOptions.width, height: wallOptions.height, area: result.area }
+        : category === 'roof'
+          ? { width: roofOptions.width, height: roofOptions.length, area: result.area }
+          : category === 'floor'
+            ? { width: floorOptions.width, height: floorOptions.length, area: result.area }
+            : { width: bathOptions.width, height: bathOptions.length, area: result.area };
+
+    const cfg =
+      category === 'wall'
+        ? {
+            faces: 2,
+            studSpacing: wallOptions.studSpacing / 100,
+            insulation: wallOptions.withInsulation
+          }
+        : category === 'roof'
+          ? {
+              faces: 1,
+              studSpacing: 0,
+              insulation: roofOptions.withInsulation
+            }
+          : category === 'floor'
+            ? {
+                faces: 0,
+                studSpacing: 0,
+                insulation: false
+              }
+            : {
+                faces: 0,
+                studSpacing: 0,
+                insulation: false
+              };
+
     return {
       project: { id: projectId, name: projectName, description: '', createdAt, updatedAt: new Date().toISOString() },
       calculation: {
         category,
         system: systemLabel(kind),
         dimensions: dims,
-        configuration: {
-          faces: category === 'wall' ? 2 : 1,
-          studSpacing: kind === 'drywall' ? round2(studSpacing / 100) : 0,
-          insulation: withInsulation
-        }
+        configuration: cfg
       },
       summary: {
         materials: round2(result.total),
@@ -126,6 +426,7 @@
 
   function handleExport() {
     downloadProject(buildProject());
+    pushHistory();
     showToast('Proyecto exportado correctamente.');
   }
 
@@ -133,13 +434,6 @@
     const ok = await copyProjectToClipboard(buildProject());
     showToast(ok ? 'Proyecto copiado al portapapeles.' : 'No se pudo copiar el proyecto.', ok ? 'success' : 'error');
   }
-
-  const APP_METADATA = {
-    app: 'ReformaCalc',
-    appVersion: '1.2',
-    currency: materials.meta.moneda,
-    language: 'es'
-  };
 
   function buildAppData() {
     ensureProjectIdentity();
@@ -149,7 +443,14 @@
       description: '',
       system: systemLabel(kind),
       area: result.area,
-      dimensions: { width, height: category === 'wall' ? height : 0, length: 0 },
+      dimensions:
+        category === 'wall'
+          ? { width: wallOptions.width, height: wallOptions.height, length: 0 }
+          : category === 'roof'
+            ? { width: roofOptions.width, height: roofOptions.length, length: 0 }
+            : category === 'floor'
+              ? { width: floorOptions.width, height: floorOptions.length, length: 0 }
+              : { width: bathOptions.width, height: bathOptions.length, length: bathOptions.wallHeight },
       estimatedHours: result.hours,
       materialsCost: round2(result.total),
       laborCost: round2(result.labor),
@@ -168,6 +469,7 @@
   function handleExportRCX() {
     try {
       downloadData('rcx', buildAppData(), { filename: projectName, appMetadata: APP_METADATA });
+      pushHistory();
       showToast('Proyecto exportado en formato RCX.');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'No se pudo exportar el proyecto en formato RCX.', 'error');
@@ -184,12 +486,83 @@
     showToast(ok ? 'Proyecto copiado al portapapeles en formato RCX.' : 'No se pudo copiar el proyecto en formato RCX.', ok ? 'success' : 'error');
   }
 
+  function handleExportCSV() {
+    try {
+      downloadData('csv', buildAppData(), { filename: projectName });
+      pushHistory();
+      showToast('CSV exportado.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No se pudo exportar el CSV.', 'error');
+    }
+  }
+
+  async function handleCopyCSV() {
+    let ok = false;
+    try {
+      ok = await copyToClipboardData('csv', buildAppData(), {});
+    } catch {
+      ok = false;
+    }
+    showToast(ok ? 'CSV copiado al portapapeles.' : 'No se pudo copiar el CSV.', ok ? 'success' : 'error');
+  }
+
+  function encodeProjectToUrl(): string {
+    const snapshot = {
+      v: 1,
+      category,
+      kind,
+      projectName,
+      wallOptions,
+      roofOptions,
+      floorOptions,
+      bathOptions
+    };
+    const json = JSON.stringify(snapshot);
+    const b64 = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(json))) : '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('p', b64);
+    return url.toString();
+  }
+
+  async function handleShareUrl() {
+    ensureProjectIdentity();
+    const url = encodeProjectToUrl();
+    try {
+      await navigator.clipboard?.writeText(url);
+      showToast('Enlace copiado al portapapeles.');
+    } catch {
+      showToast('No se pudo copiar el enlace. Cópialo manualmente de la barra de direcciones.', 'error');
+    }
+    window.history.replaceState({}, '', url);
+  }
+
+  function loadFromUrl(): boolean {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('p');
+    if (!p) return false;
+    try {
+      const json = typeof atob !== 'undefined' ? decodeURIComponent(escape(atob(p))) : '';
+      const data = JSON.parse(json);
+      if (data.category) category = data.category;
+      if (data.kind) kind = data.kind;
+      if (data.projectName) projectName = data.projectName;
+      if (data.wallOptions) wallOptions = { ...WALL_DEFAULTS, ...data.wallOptions };
+      if (data.roofOptions) roofOptions = { ...ROOF_DEFAULTS, ...data.roofOptions };
+      if (data.floorOptions) floorOptions = { ...FLOOR_DEFAULTS, ...data.floorOptions };
+      if (data.bathOptions) bathOptions = { ...BATH_DEFAULTS, ...data.bathOptions };
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   const systemToKind: Record<string, Kind> = {
+    drywall: 'drywall',
     pladur: 'drywall',
     pladur_seco: 'drywall',
-    drywall: 'drywall',
-    bloque: 'block',
     block: 'block',
+    bloque: 'block',
     ladrillo: 'ladrillo',
     techo_continuo: 'continuo',
     continuo: 'continuo',
@@ -197,15 +570,19 @@
     techo_desmontable: 'desmontable',
     desmontable: 'desmontable',
     falso_techo_desmontable: 'desmontable',
-    registrable: 'desmontable'
+    registrable: 'desmontable',
+    tarima: 'tarima',
+    ceramica: 'ceramica',
+    microcemento: 'microcemento',
+    bano: 'bano'
   };
 
   const systemToCategory: Record<string, Category> = {
+    drywall: 'wall',
     pladur: 'wall',
     pladur_seco: 'wall',
-    drywall: 'wall',
-    bloque: 'wall',
     block: 'wall',
+    bloque: 'wall',
     ladrillo: 'wall',
     techo_continuo: 'roof',
     continuo: 'roof',
@@ -213,43 +590,14 @@
     techo_desmontable: 'roof',
     desmontable: 'roof',
     falso_techo_desmontable: 'roof',
-    registrable: 'roof'
+    registrable: 'roof',
+    tarima: 'floor',
+    ceramica: 'floor',
+    microcemento: 'floor',
+    bano: 'bath',
+    bano_alicatado: 'bath',
+    bano_completo: 'bath'
   };
-
-  const spacingOptions: (40 | 50 | 60 | 80)[] = [40, 50, 60, 80];
-
-  function nearestSpacing(cm: number): 40 | 50 | 60 | 80 {
-    return spacingOptions.reduce((best, s) => (Math.abs(s - cm) < Math.abs(best - cm) ? s : best), spacingOptions[0]);
-  }
-
-  function applyProject(project: ReformaCalcProject) {
-    const calc = project.calculation ?? ({} as ReformaCalcProject['calculation']);
-    const dims = calc.dimensions ?? ({} as ReformaCalcProject['calculation']['dimensions']);
-    const cfg = calc.configuration ?? ({} as ReformaCalcProject['calculation']['configuration']);
-    const meta = project.project ?? ({} as ReformaCalcProject['project']);
-    if (meta.id) projectId = meta.id;
-    if (meta.createdAt) createdAt = meta.createdAt;
-    projectName = meta.name || projectName;
-    const resolvedKind = systemToKind[calc.system] ?? kind;
-    const resolvedCategory: Category = (calc.category as Category) ?? systemToCategory[calc.system] ?? (isRoofKind(resolvedKind) ? 'roof' : 'wall');
-    category = resolvedCategory;
-    kind = resolvedKind;
-    if (typeof dims.width === 'number' && dims.width > 0) width = dims.width;
-    if (category === 'wall' && typeof dims.height === 'number' && dims.height > 0) height = dims.height;
-    const area = typeof dims.area === 'number' && dims.area >= 0 ? dims.area : width * (category === 'wall' ? height : 1);
-    if (category === 'wall') {
-      openings = round2(Math.max(0, width * height - area));
-    } else {
-      openings = 0;
-    }
-    if (typeof cfg.studSpacing === 'number' && cfg.studSpacing > 0) {
-      studSpacing = nearestSpacing(cfg.studSpacing * 100);
-    }
-    withInsulation = cfg.insulation !== false;
-    laborOn = true;
-    step = 3;
-    menu = 'wizard';
-  }
 
   function handleImportClick() {
     fileInput?.click();
@@ -270,193 +618,86 @@
     }
   }
 
-  function startWizard(selectedCategory: Category) {
-    category = selectedCategory;
-    if (selectedCategory === 'roof') {
-      kind = 'continuo';
-      width = 4;
-      height = 0;
-      openings = 0;
-      withInsulation = false;
-    } else {
-      kind = 'drywall';
-      width = 3.2;
-      height = 2.6;
-      openings = 0;
-      withInsulation = true;
+  function applyProject(project: ReformaCalcProject) {
+    const calc = project.calculation ?? ({} as ReformaCalcProject['calculation']);
+    const dims = calc.dimensions ?? ({} as ReformaCalcProject['calculation']['dimensions']);
+    const cfg = calc.configuration ?? ({} as ReformaCalcProject['calculation']['configuration']);
+    const meta = project.project ?? ({} as ReformaCalcProject['project']);
+    if (meta.id) projectId = meta.id;
+    if (meta.createdAt) createdAt = meta.createdAt;
+    projectName = meta.name || projectName;
+    const resolvedKind = systemToKind[calc.system] ?? kind;
+    const resolvedCategory: Category =
+      (calc.category as Category) ?? systemToCategory[calc.system] ?? (resolvedKind === 'continuo' || resolvedKind === 'desmontable' ? 'roof' : resolvedKind === 'tarima' || resolvedKind === 'ceramica' || resolvedKind === 'microcemento' ? 'floor' : resolvedKind === 'bano' ? 'bath' : 'wall');
+    category = resolvedCategory;
+    kind = resolvedKind;
+
+    if (category === 'wall') {
+      const areaBruta = (dims.width ?? 0) * (dims.height ?? 0);
+      const deducido = Math.max(0, areaBruta - (dims.area ?? 0));
+      wallOptions = {
+        kind: resolvedKind === 'block' || resolvedKind === 'ladrillo' ? resolvedKind : 'drywall',
+        width: typeof dims.width === 'number' ? dims.width : wallOptions.width,
+        height: typeof dims.height === 'number' && dims.height > 0 ? dims.height : wallOptions.height,
+        huecos: deducido > 0
+          ? [{ id: crypto.randomUUID?.() ?? 'h-import', tipo: 'ventana', nombre: 'Hueco importado', ancho: Math.sqrt(deducido), alto: Math.sqrt(deducido), cantidad: 1 }]
+          : [],
+        studSpacing: typeof cfg.studSpacing === 'number' && cfg.studSpacing > 0 ? nearestSpacing(cfg.studSpacing * 100) : wallOptions.studSpacing,
+        thickness: wallOptions.thickness,
+        withInsulation: cfg.insulation !== false,
+        laborOn: true,
+        merma: wallOptions.merma
+      };
+    } else if (category === 'roof') {
+      roofOptions = {
+        kind: resolvedKind === 'desmontable' ? 'desmontable' : 'continuo',
+        width: typeof dims.width === 'number' ? dims.width : roofOptions.width,
+        length: typeof dims.height === 'number' ? dims.height : roofOptions.length,
+        withInsulation: cfg.insulation === true,
+        roofDropCm: roofOptions.roofDropCm,
+        laborOn: true
+      };
+    } else if (category === 'floor') {
+      floorOptions = {
+        kind: resolvedKind === 'ceramica' || resolvedKind === 'microcemento' ? resolvedKind : 'tarima',
+        width: typeof dims.width === 'number' ? dims.width : floorOptions.width,
+        length: typeof dims.height === 'number' ? dims.height : floorOptions.length,
+        laborOn: true
+      };
+    } else if (category === 'bath') {
+      bathOptions = {
+        ...bathOptions,
+        width: typeof dims.width === 'number' ? dims.width : bathOptions.width,
+        length: typeof dims.height === 'number' ? dims.height : bathOptions.length,
+        wallHeight: typeof dims.area === 'number' && dims.area > 0 ? dims.area / 4 : bathOptions.wallHeight,
+        laborOn: true
+      };
     }
-    step = 1;
+
+    step = 3;
     menu = 'wizard';
-  }
-
-  function goHome() {
-    menu = 'home';
-    step = 1;
-  }
-
-  const wallKinds: { id: WallKind; label: string; subtitle: string; icon: string }[] = [
-    { id: 'drywall', label: 'Pladur', subtitle: 'Ligero y rápido', icon: '▧' },
-    { id: 'block', label: 'Block', subtitle: 'Resistente', icon: '▦' },
-    { id: 'ladrillo', label: 'Ladrillo', subtitle: 'Tradicional', icon: '▤' }
-  ];
-
-  const roofKinds: { id: RoofKind; label: string; subtitle: string; icon: string }[] = [
-    { id: 'continuo', label: 'Continuo', subtitle: 'Placa lisa con juntas', icon: '▭' },
-    { id: 'desmontable', label: 'Desmontable', subtitle: 'Perfilería T + paneles', icon: '▦' }
-  ];
-
-  const kinds: { id: Kind; label: string; subtitle: string; icon: string }[] = $derived(
-    (category as Category) === 'roof' ? roofKinds : wallKinds
-  );
-
-  function byId(id: string): Material {
-    const found = materials.materiales.find((item) => item.id === id);
-    if (!found) throw new Error(`Material no encontrado: ${id}`);
-    return found;
-  }
-
-  function ceilWithWaste(value: number, waste = 0) {
-    return Math.ceil(value * (1 + waste));
-  }
-
-  function calculateWall(): { area: number; lines: Line[]; total: number; labor: number; hours: number; grandTotal: number } {
-    const area = Math.max(0, width * height - openings);
-    const lines: Line[] = [];
-    if (kind === 'drywall') {
-      const plates = byId('placa_yeso_estandar');
-      const studs = byId('montante_m48');
-      const tracks = byId('canal_c48');
-      const screws = byId('tornillos_placa');
-      const structureScrews = byId('tornillos_estructura');
-      const jointTape = byId('cinta_juntas');
-      const joint = byId('pasta_juntas');
-      const insulation = byId('lana_mineral');
-      const consumos = materials.consumos.drywall;
-      const plateCount = ceilWithWaste((area * 2) / Number(plates.superficieM2), consumos.desperdicioPlacas);
-      const studCount = Math.ceil(width / (studSpacing / 100)) + 1;
-      const trackCount = ceilWithWaste((width * 2) / Number(tracks.longitudM), 0.08);
-      lines.push({ material: plates, quantity: plateCount, total: 0, detail: '2 caras · 2,5 × 1,2 m' });
-      lines.push({ material: studs, quantity: studCount, total: 0, detail: `Montante vertical cada ${studSpacing} cm` });
-      lines.push({ material: tracks, quantity: trackCount, total: 0, detail: 'Canal superior e inferior' });
-      if (withInsulation) {
-        lines.push({ material: insulation, quantity: Math.ceil(area / Number(insulation.superficieM2)), total: 0, detail: 'Aislamiento interior' });
-      }
-      lines.push({ material: screws, quantity: Math.ceil((area * 2 * consumos.tornillosPorM2Placa) / Number(screws.udsPorEnvase)), total: 0, detail: screws.formato });
-      lines.push({ material: structureScrews, quantity: Math.ceil((studCount * consumos.tornillosEstructuraPorMontante) / Number(structureScrews.udsPorEnvase)), total: 0, detail: structureScrews.formato });
-      lines.push({ material: jointTape, quantity: Math.ceil((plateCount * consumos.cintaMetrosPorPlaca) / Number(jointTape.longitudM)), total: 0, detail: jointTape.formato });
-      lines.push({ material: joint, quantity: Math.ceil((area * 2 * consumos.pastaKgPorM2Placa) / Number(joint.kgPorEnvase)), total: 0, detail: joint.formato });
-    } else if (kind === 'block' || kind === 'ladrillo') {
-      const wallKind: WallKind = kind;
-      const unit = byId(wallKind === 'block' ? 'bloque_hormigon_15' : 'ladrillo_hueco_doble');
-      const mortar = byId('mortero_seco');
-      const consumos = materials.consumos[wallKind];
-      lines.push({ material: unit, quantity: Math.ceil(area * consumos.udsPorM2 * (1 + consumos.desperdicio)), total: 0, detail: `${consumos.udsPorM2} uds./m² · ${unit.formato}` });
-      lines.push({ material: mortar, quantity: Math.ceil((area * consumos.morteroKgPorM2) / Number(mortar.kgPorEnvase)), total: 0, detail: `${consumos.morteroKgPorM2} kg/m² · ${mortar.formato}` });
-    }
-    return finalizeCalculation(area, lines);
-  }
-
-  function calculateRoof(): { area: number; lines: Line[]; total: number; labor: number; hours: number; grandTotal: number } {
-    const w = Math.max(0, width);
-    const d = Math.max(0, height);
-    const area = Math.max(0, w * d);
-    const lines: Line[] = [];
-    if (kind === 'continuo') {
-      const plates = byId('placa_yeso_estandar');
-      const omega = byId('perfil_omega_47');
-      const screws = byId('tornillos_placa');
-      const jointTape = byId('cinta_juntas');
-      const joint = byId('pasta_juntas');
-      const insulation = byId('lana_mineral');
-      const varilla = byId('varilla_roscada_m6');
-      const horquilla = byId('horquilla_cuelgue');
-      const taco = byId('taco_varilla_m6');
-      const tuerca = byId('tuerca_m6');
-      const consumos = materials.consumos.techo_continuo;
-      const separacion = consumos.separacionOmegaCm / 100;
-      const plateCount = Math.max(1, Math.ceil(ceilWithWaste(area, consumos.desperdicioPlacas) / Number(plates.superficieM2)));
-      const omegaRows = Math.max(1, Math.ceil(ceilWithWaste(w, consumos.desperdicioPerfiles) / separacion));
-      const omegasML = omegaRows * ceilWithWaste(d, consumos.desperdicioPerfiles);
-      const omegaCount = Math.max(1, Math.ceil(omegasML / Number(omega.longitudM)));
-      const cuelgues = Math.max(1, Math.ceil(area * consumos.cuelguePorM2));
-      lines.push({ material: plates, quantity: plateCount, total: 0, detail: `1 capa · ${plates.formato}` });
-      lines.push({ material: omega, quantity: omegaCount, total: 0, detail: `Perfil omega cada ${consumos.separacionOmegaCm} cm` });
-      lines.push({ material: varilla, quantity: cuelgues, total: 0, detail: `Cuelgues cada ≈${(1 / consumos.cuelguePorM2).toFixed(2)} m²` });
-      lines.push({ material: horquilla, quantity: cuelgues, total: 0, detail: 'Horquilla M6 para omega' });
-      lines.push({ material: taco, quantity: cuelgues, total: 0, detail: 'Taco metálico M6 al forjado' });
-      lines.push({ material: tuerca, quantity: cuelgues * 2, total: 0, detail: '2 tuercas por cuelgue (seguro + regulación)' });
-      if (withInsulation) {
-        lines.push({ material: insulation, quantity: Math.max(1, Math.ceil(area / Number(insulation.superficieM2))), total: 0, detail: 'Aislamiento sobre placa' });
-      }
-      lines.push({ material: screws, quantity: Math.max(1, Math.ceil((area * consumos.tornillosPorM2Placa) / Number(screws.udsPorEnvase))), total: 0, detail: screws.formato });
-      lines.push({ material: jointTape, quantity: Math.max(1, Math.ceil((plateCount * consumos.cintaMetrosPorPlaca) / Number(jointTape.longitudM))), total: 0, detail: jointTape.formato });
-      lines.push({ material: joint, quantity: Math.max(1, Math.ceil((area * consumos.pastaKgPorM2Placa) / Number(joint.kgPorEnvase))), total: 0, detail: joint.formato });
-    } else if (kind === 'desmontable') {
-      const primario = byId('perfil_T_primario_24');
-      const secundarioLargo = byId('perfil_T_secundario_24');
-      const secundarioCorto = byId('perfil_T_secundario_24_largo');
-      const angular = byId('perfil_angular_T24');
-      const varilla = byId('varilla_roscada_m6');
-      const taco = byId('taco_varilla_m6');
-      const clip = byId('clip_cuelgue_T');
-      const panel = byId('panel_acustico_60x60');
-      const consumos = materials.consumos.techo_desmontable;
-      const sepPrimario = consumos.separacionPrimarioCm / 100;
-      const sepSecundario = consumos.separacionSecundarioCm / 100;
-      const numPrimarios = Math.max(1, Math.ceil(ceilWithWaste(w, consumos.desperdicioPerfiles) / sepPrimario));
-      const primaryLineal = numPrimarios * ceilWithWaste(d, consumos.desperdicioPerfiles);
-      const primarioCount = Math.max(1, Math.ceil(primaryLineal / Number(primario.longitudM)));
-      const numCeldasLargo = Math.max(1, Math.ceil(ceilWithWaste(d, consumos.desperdicioPerfiles) / sepSecundario));
-      const secundarioLargoCount = Math.max(1, Math.ceil((numPrimarios * Math.ceil(numCeldasLargo / 2)) * (1 + consumos.desperdicioPerfiles)));
-      const secundarioCortoCount = Math.max(1, Math.ceil((numPrimarios * Math.floor(numCeldasLargo / 2)) * (1 + consumos.desperdicioPerfiles)));
-      const angularML = 2 * (ceilWithWaste(w, consumos.desperdicioPerfiles) + ceilWithWaste(d, consumos.desperdicioPerfiles));
-      const angularCount = Math.max(1, Math.ceil(angularML / Number(angular.longitudM)));
-      const cuelgues = Math.max(1, Math.ceil(area * consumos.cuelguePorM2));
-      const panelesCount = Math.max(1, Math.ceil(ceilWithWaste(area, consumos.desperdicioPaneles) / Number(panel.superficieM2)));
-      lines.push({ material: primario, quantity: primarioCount, total: 0, detail: `Perfil T primario cada ${consumos.separacionPrimarioCm} cm` });
-      lines.push({ material: secundarioLargo, quantity: secundarioLargoCount, total: 0, detail: 'Secundario largo 1,2 m' });
-      lines.push({ material: secundarioCorto, quantity: secundarioCortoCount, total: 0, detail: 'Secundario corto 0,6 m' });
-      lines.push({ material: angular, quantity: angularCount, total: 0, detail: 'Perfil angular perimetral' });
-      lines.push({ material: varilla, quantity: cuelgues, total: 0, detail: 'Cuelgue con varilla M6' });
-      lines.push({ material: taco, quantity: cuelgues, total: 0, detail: 'Taco metálico M6 al forjado' });
-      lines.push({ material: clip, quantity: cuelgues, total: 0, detail: 'Clip con muelle para T24' });
-      lines.push({ material: panel, quantity: panelesCount, total: 0, detail: 'Panel acústico 600 × 600 mm' });
-    }
-    return finalizeCalculation(area, lines);
-  }
-
-  function getLaborInfo() {
-    const laborKey = systemLabel(kind) as keyof typeof materials.manoObra;
-    return materials.manoObra[laborKey] ?? materials.manoObra.drywall;
-  }
-
-  function finalizeCalculation(area: number, lines: Line[]) {
-    lines.forEach((line) => (line.total = line.quantity * line.material.precio));
-    const laborInfo = getLaborInfo();
-    const laborRate = laborInfo.precioM2;
-    const labor = laborOn ? area * laborRate : 0;
-    const hours = Math.max(1, (area / laborInfo.m2PorDia) * 8);
-    const total = lines.reduce((sum, line) => sum + line.total, 0);
-    return { area, lines, total, labor, hours, grandTotal: total + labor };
-  }
-
-  function calculate() {
-    if (category === 'roof') return calculateRoof();
-    return calculateWall();
-  }
-
-  let result = $derived(calculate());
-
-  function euro(value: number) {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: materials.meta.moneda }).format(value);
   }
 
   function next() { if (step < 3) step = (step + 1) as 1 | 2 | 3; }
   function back() { if (step > 1) step = (step - 1) as 1 | 2 | 3; }
-  function reset() {
-    width = 3.2; height = 2.6; openings = 0; thickness = 'M48'; studSpacing = 60; withInsulation = true; laborOn = true;
-    category = 'wall'; kind = 'drywall'; roofDropCm = 10; step = 1; menu = 'home'; projectId = ''; createdAt = '';
-  }
+
+  // Catálogos auxiliares para los selects del wizard de suelo y baño.
+  const tarimaSurfaces: { id: FloorSurface; label: string; materialId: string }[] = [
+    { id: 'tarima_laminada', label: 'Laminada AC4', materialId: 'tarima_laminada_ac4' },
+    { id: 'tarima_madera', label: 'Madera roble', materialId: 'tarima_madera_roble' }
+  ];
+
+  const baldosas = materialesPorSistema('ceramica').filter((m) => m.categoria === 'azulejo' || m.categoria === 'baldosa');
+
+  const floorAdhesiveOptions: { id: AdhesiveType; label: string }[] = [
+    { id: 'C1', label: 'C1 estándar' },
+    { id: 'C2TE', label: 'C2TE flexible (recomendado baños)' }
+  ];
+
+  const underlaymentOptions: { id: UnderlaymentType; label: string }[] = [
+    { id: 'espuma', label: 'Espuma PE 3 mm' },
+    { id: 'corcho', label: 'Corcho 2 mm' }
+  ];
 </script>
 
 <svelte:head>
@@ -473,7 +714,7 @@
         <p class="eyebrow menu-eyebrow">¿QUÉ QUIERES CONSTRUIR?</p>
         <div class="menu-list">
           {#each menuItems as item}
-            <button class="menu-card" class:enabled={item.available} disabled={!item.available} onclick={() => item.available && startWizard(item.id === 'roof' ? 'roof' : 'wall')}>
+            <button class="menu-card enabled" onclick={() => startWizard(item.id)}>
               <span class="menu-icon" aria-hidden="true">
                 {#if item.icon === 'wall'}
                   <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 26h20M6 22h20M6 18h20M6 14h20M6 10h20M6 6h20"/></svg>
@@ -489,11 +730,7 @@
                 <strong>{item.title}</strong>
                 <small>{item.subtitle}</small>
               </span>
-              {#if item.available}
-                <span class="menu-arrow" aria-hidden="true">→</span>
-              {:else}
-                <span class="menu-soon">PRÓXIMAMENTE</span>
-              {/if}
+              <span class="menu-arrow" aria-hidden="true">→</span>
             </button>
           {/each}
         </div>
@@ -523,45 +760,219 @@
 
     {#if step === 1}
       <section class="card step-pane">
-        <div class="section-heading"><div><p class="eyebrow">PASO 01</p><h2>{category === 'roof' ? '¿Qué tipo de techo?' : '¿Qué vas a construir?'}</h2></div><span class="step-badge">1/3</span></div>
-        <div class="kind-grid">{#each kinds as option}<button class:chosen={kind === option.id} class="kind" onclick={() => { kind = option.id; }}><span class="kind-icon">{option.icon}</span><strong>{option.label}</strong><small>{option.subtitle}</small>{#if kind === option.id}<b class="check">✓</b>{/if}</button>{/each}</div>
-        {#if kind === 'drywall'}<label class="select-label">TIPO DE SISTEMA <select bind:value={thickness}><option>M48</option><option>M70</option><option>M90</option></select></label>{/if}
-        {#if kind === 'drywall'}<label class="select-label">SEPARACIÓN ENTRE MONTANTES <select bind:value={studSpacing}><option value={40}>40 cm</option><option value={50}>50 cm</option><option value={60}>60 cm</option><option value={80}>80 cm</option></select></label>{/if}
-        {#if kind === 'continuo'}<label class="select-label">CAÍDA DEL TECHO <div class="stepper-input"><button onclick={() => roofDropCm = Math.max(0, roofDropCm - 1)}>−</button><input type="number" min="0" max="50" step="1" bind:value={roofDropCm} /><button onclick={() => roofDropCm = Math.min(50, roofDropCm + 1)}>+</button></div><small class="hint">Distancia entre forjado y placa (cm). Se calcula con varilla M6 estándar.</small></label>{/if}
-        {#if category === 'roof'}<label class="toggle"><input type="checkbox" bind:checked={withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento sobre el techo</span></label>{/if}
-        {#if kind === 'drywall'}<label class="toggle"><input type="checkbox" bind:checked={withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento interior</span></label>{/if}
-        <label class="toggle"><input type="checkbox" bind:checked={laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+        <div class="section-heading"><div><p class="eyebrow">PASO 01</p><h2>{categoryPrettyName()} · ¿Qué tipo?</h2></div><span class="step-badge">1/3</span></div>
+        {#if kinds.length > 1}
+          <div class="kind-grid">{#each kinds as option}<button class:chosen={kind === option.id} class="kind" onclick={() => { kind = option.id; }}><span class="kind-icon">{option.icon}</span><strong>{option.label}</strong><small>{option.subtitle}</small>{#if kind === option.id}<b class="check">✓</b>{/if}</button>{/each}</div>
+        {/if}
+
+        {#if category === 'wall'}
+          {#if kind === 'drywall'}
+            <label class="select-label">TIPO DE SISTEMA
+              <select bind:value={wallOptions.thickness}>
+                <option value="M48">M48</option>
+                <option value="M70">M70</option>
+                <option value="M90">M90</option>
+              </select>
+            </label>
+            <label class="select-label">SEPARACIÓN ENTRE MONTANTES
+              <select bind:value={wallOptions.studSpacing}>
+                {#each spacingOptions as s}<option value={s}>{s} cm</option>{/each}
+              </select>
+            </label>
+          {/if}
+          {#if kind === 'drywall'}
+            <label class="toggle"><input type="checkbox" bind:checked={wallOptions.withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento interior</span></label>
+          {/if}
+          <label class="toggle"><input type="checkbox" bind:checked={wallOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+          {#if wallOptions.laborOn}
+            <label class="select-label">
+              TARIFA MANO DE OBRA <small>€/m² · por defecto {manoObraBySistema(wallOptions.kind).precioM2} €/m²</small>
+              <input type="number" min="0" step="0.5" placeholder={String(manoObraBySistema(wallOptions.kind).precioM2 ?? '')} bind:value={wallOptions.laborRate} />
+            </label>
+          {/if}
+        {/if}
+
+        {#if category === 'roof'}
+          {#if kind === 'continuo'}
+            <label class="select-label">CAÍDA DEL TECHO
+              <div class="stepper-input">
+                <button onclick={() => roofOptions.roofDropCm = Math.max(0, roofOptions.roofDropCm - 1)}>−</button>
+                <input type="number" min="0" max="50" step="1" bind:value={roofOptions.roofDropCm} />
+                <button onclick={() => roofOptions.roofDropCm = Math.min(50, roofOptions.roofDropCm + 1)}>+</button>
+              </div>
+              <small class="hint">Distancia entre forjado y placa (cm). Se calcula con varilla M6 estándar.</small>
+            </label>
+          {/if}
+          <label class="toggle"><input type="checkbox" bind:checked={roofOptions.withInsulation} /><span class="track"><i></i></span><span>Incluir aislamiento sobre el techo</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={roofOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+        {/if}
+
+        {#if category === 'floor'}
+          {#if kind === 'tarima'}
+            <label class="select-label">TIPO DE TARIMA
+              <select bind:value={floorOptions.tarimaSurface}>
+                {#each tarimaSurfaces as s}<option value={s.id}>{s.label}</option>{/each}
+              </select>
+            </label>
+            <label class="select-label">UNDERLAYMENT
+              <select bind:value={floorOptions.underlayment}>
+                {#each underlaymentOptions as u}<option value={u.id}>{u.label}</option>{/each}
+              </select>
+            </label>
+          {/if}
+          {#if kind === 'ceramica'}
+            <label class="select-label">TIPO DE ADHESIVO
+              <select bind:value={floorOptions.adhesive}>
+                {#each floorAdhesiveOptions as a}<option value={a.id}>{a.label}</option>{/each}
+              </select>
+            </label>
+          {/if}
+          <label class="toggle"><input type="checkbox" bind:checked={floorOptions.aplicarNivelacion} /><span class="track"><i></i></span><span>Aplicar mortero de nivelación previo</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={floorOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+        {/if}
+
+        {#if category === 'bath'}
+          <p class="hint">Marca los bloques que incluirá la reforma. Puedes modificar después.</p>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.withDemolicion} /><span class="track"><i></i></span><span>Demolición + retirada de escombros</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.withAlicatado} /><span class="track"><i></i></span><span>Alicatado de paredes y suelo</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.withFontaneria} /><span class="track"><i></i></span><span>Fontanería (tubería y puntos de agua)</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.withSanitarios} /><span class="track"><i></i></span><span>Sanitarios y grifería</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.withPintura} /><span class="track"><i></i></span><span>Pintura de techo</span></label>
+          <hr style="border:none;border-top:1px solid #e3e8ea;margin:14px 0;" />
+          <p class="hint">Sanitarios a instalar:</p>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.inodoro} /><span class="track"><i></i></span><span>Inodoro</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.lavabo} /><span class="track"><i></i></span><span>Lavabo + mueble</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.platoDucha} /><span class="track"><i></i></span><span>Plato de ducha + grifería</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.mampara} /><span class="track"><i></i></span><span>Mampara</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.espejo} /><span class="track"><i></i></span><span>Espejo</span></label>
+          <label class="toggle"><input type="checkbox" bind:checked={bathOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+        {/if}
+
         <div class="step-nav"><span></span><button class="primary" onclick={next}>Siguiente →</button></div>
       </section>
     {/if}
 
     {#if step === 2}
       <section class="card step-pane">
-        <div class="section-heading"><div><p class="eyebrow">PASO 02</p><h2>{category === 'roof' ? 'Medidas del techo' : 'Introduce las medidas'}</h2></div><span class="step-badge muted">2/3</span></div>
+        <div class="section-heading"><div><p class="eyebrow">PASO 02</p><h2>
+          {category === 'wall' ? 'Introduce las medidas' :
+           category === 'roof' ? 'Medidas del techo' :
+           category === 'floor' ? 'Medidas del suelo' :
+           'Medidas del baño'}
+        </h2></div><span class="step-badge muted">2/3</span></div>
         <div class="fields">
-          <label><span>{category === 'roof' ? 'LARGO' : 'ANCHO'} <small>metros</small></span><div class="stepper-input"><button onclick={() => width = Math.max(0.1, +(width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={width} /><button onclick={() => width = +(width + 0.1).toFixed(2)}>+</button></div></label>
-          <span class="times">×</span>
-          <label><span>{category === 'roof' ? 'ANCHO' : 'ALTO'} <small>metros</small></span><div class="stepper-input"><button onclick={() => height = Math.max(0.1, +(height - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={height} /><button onclick={() => height = +(height + 0.1).toFixed(2)}>+</button></div></label>
+          {#if category === 'wall'}
+            <label><span>ANCHO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => wallOptions.width = Math.max(0.1, +(wallOptions.width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={wallOptions.width} /><button onclick={() => wallOptions.width = +(wallOptions.width + 0.1).toFixed(2)}>+</button></div>
+            </label>
+            <span class="times">×</span>
+            <label><span>ALTO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => wallOptions.height = Math.max(0.1, +(wallOptions.height - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={wallOptions.height} /><button onclick={() => wallOptions.height = +(wallOptions.height + 0.1).toFixed(2)}>+</button></div>
+            </label>
+          {:else if category === 'roof'}
+            <label><span>LARGO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => roofOptions.width = Math.max(0.1, +(roofOptions.width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={roofOptions.width} /><button onclick={() => roofOptions.width = +(roofOptions.width + 0.1).toFixed(2)}>+</button></div>
+            </label>
+            <span class="times">×</span>
+            <label><span>ANCHO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => roofOptions.length = Math.max(0.1, +(roofOptions.length - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={roofOptions.length} /><button onclick={() => roofOptions.length = +(roofOptions.length + 0.1).toFixed(2)}>+</button></div>
+            </label>
+          {:else if category === 'floor'}
+            <label><span>ANCHO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => floorOptions.width = Math.max(0.1, +(floorOptions.width - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={floorOptions.width} /><button onclick={() => floorOptions.width = +(floorOptions.width + 0.1).toFixed(2)}>+</button></div>
+            </label>
+            <span class="times">×</span>
+            <label><span>LARGO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => floorOptions.length = Math.max(0.1, +(floorOptions.length - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={floorOptions.length} /><button onclick={() => floorOptions.length = +(floorOptions.length + 0.1).toFixed(2)}>+</button></div>
+            </label>
+          {:else}
+            <label><span>ANCHO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => bathOptions.width = Math.max(0.5, +(bathOptions.width - 0.1).toFixed(2))}>−</button><input type="number" min="0.5" step="0.1" bind:value={bathOptions.width} /><button onclick={() => bathOptions.width = +(bathOptions.width + 0.1).toFixed(2)}>+</button></div>
+            </label>
+            <span class="times">×</span>
+            <label><span>LARGO <small>metros</small></span>
+              <div class="stepper-input"><button onclick={() => bathOptions.length = Math.max(0.5, +(bathOptions.length - 0.1).toFixed(2))}>−</button><input type="number" min="0.5" step="0.1" bind:value={bathOptions.length} /><button onclick={() => bathOptions.length = +(bathOptions.length + 0.1).toFixed(2)}>+</button></div>
+            </label>
+          {/if}
         </div>
         {#if category === 'wall'}
-          <label class="opening-field"><span>HUECOS (PUERTAS / VENTANAS) <small>m² a descontar</small></span><div class="stepper-input"><button onclick={() => openings = Math.max(0, +(openings - 0.1).toFixed(2))}>−</button><input type="number" min="0" step="0.1" bind:value={openings} /><button onclick={() => openings = +(openings + 0.1).toFixed(2)}>+</button></div></label>
+          <div class="huecos-section">
+            <div class="huecos-head">
+              <span class="huecos-title">HUECOS (PUERTAS / VENTANAS)</span>
+              <small class="hint">{wallOptions.huecos.reduce((s, h) => s + h.ancho * h.alto * h.cantidad, 0).toFixed(2)} m² a descontar</small>
+            </div>
+            {#if wallOptions.huecos.length > 0}
+              <ul class="huecos-list">
+                {#each wallOptions.huecos as h, i (h.id)}
+                  <li class="hueco-row">
+                    <select bind:value={h.tipo} aria-label="Tipo">
+                      <option value="puerta">Puerta</option>
+                      <option value="ventana">Ventana</option>
+                    </select>
+                    <input class="hueco-nombre" type="text" bind:value={h.nombre} placeholder="Nombre" aria-label="Nombre" />
+                    <label class="hueco-dim"><span>ancho</span><input type="number" min="0.1" step="0.01" bind:value={h.ancho} /></label>
+                    <label class="hueco-dim"><span>alto</span><input type="number" min="0.1" step="0.01" bind:value={h.alto} /></label>
+                    <label class="hueco-dim"><span>uds.</span><input type="number" min="1" step="1" bind:value={h.cantidad} /></label>
+                    <button class="hueco-del" onclick={() => wallOptions.huecos.splice(i, 1)} aria-label="Eliminar hueco">×</button>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="hint">No has añadido huecos. La superficie a cubrir será el área bruta.</p>
+            {/if}
+            <div class="huecos-actions">
+              <select onchange={(e) => { const opt = (e.currentTarget as HTMLSelectElement).selectedOptions[0]; const preset = catalog.huecosPreset.find((p) => p.id === opt.value); if (preset) { wallOptions.huecos.push({ id: crypto.randomUUID?.() ?? `h-${Date.now()}`, tipo: preset.tipo, nombre: preset.nombre, ancho: preset.ancho, alto: preset.alto, cantidad: 1 }); wallOptions.huecos = [...wallOptions.huecos]; } (e.currentTarget as HTMLSelectElement).value = ''; }} aria-label="Añadir hueco predefinido">
+                <option value="">+ Añadir hueco predefinido…</option>
+                {#each catalog.huecosPreset as preset}<option value={preset.id}>{preset.nombre} ({preset.ancho.toFixed(2)} × {preset.alto.toFixed(2)} m)</option>{/each}
+              </select>
+              <button class="ghost-btn" onclick={() => wallOptions.huecos.push({ id: crypto.randomUUID?.() ?? `h-${Date.now()}`, tipo: 'puerta', nombre: 'Personalizado', ancho: 0.82, alto: 2.10, cantidad: 1 }) && (wallOptions.huecos = [...wallOptions.huecos])}>+ Hueco manual</button>
+            </div>
+            <label class="merma-field">
+              <span>MERMA ADICIONAL <small>{(wallOptions.merma * 100).toFixed(0)}% sobre la base del sistema</small></span>
+              <input type="range" min="0" max="0.15" step="0.01" bind:value={wallOptions.merma} />
+            </label>
+          </div>
+        {:else if category === 'bath'}
+          <label class="opening-field"><span>ALTURA PAREDES <small>metros</small></span>
+            <div class="stepper-input"><button onclick={() => bathOptions.wallHeight = Math.max(1.8, +(bathOptions.wallHeight - 0.1).toFixed(2))}>−</button><input type="number" min="1.8" max="3.5" step="0.1" bind:value={bathOptions.wallHeight} /><button onclick={() => bathOptions.wallHeight = +(bathOptions.wallHeight + 0.1).toFixed(2)}>+</button></div>
+          </label>
+          {#if bathOptions.withFontaneria}
+            <label class="opening-field"><span>PUNTOS DE AGUA <small>uds. (fría + caliente)</small></span>
+              <div class="stepper-input"><button onclick={() => bathOptions.puntosAgua = Math.max(1, bathOptions.puntosAgua - 1)}>−</button><input type="number" min="1" max="20" step="1" bind:value={bathOptions.puntosAgua} /><button onclick={() => bathOptions.puntosAgua = Math.min(20, bathOptions.puntosAgua + 1)}>+</button></div>
+            </label>
+          {/if}
+          {#if bathOptions.withAlicatado}
+            <label class="select-label">AZULEJO
+              <select bind:value={bathOptions.baldosaId}>
+                {#each baldosas as b}<option value={b.id}>{b.nombre}</option>{/each}
+              </select>
+            </label>
+          {/if}
         {:else}
-          <p class="hint roof-hint">Mide largo y ancho del techo. Se descuentan huecos de placas / luminarias con un 5% extra de material.</p>
+          <p class="hint roof-hint">Mide largo y ancho de la superficie. Se aplica un 10% de merma por cortes.</p>
         {/if}
         <div class="presets">
           <span>Preset:</span>
           {#if category === 'wall'}
-            <button onclick={() => { width = 3; height = 2.5; openings = 1.8; }}>Habitación</button>
-            <button onclick={() => { width = 1.2; height = 2.6; openings = 0; }}>Pasillo</button>
-            <button onclick={() => { width = 5; height = 3; openings = 2.5; }}>Salón grande</button>
+            <button onclick={() => { wallOptions.width = 3; wallOptions.height = 2.5; wallOptions.huecos = [{ id: crypto.randomUUID?.() ?? 'h1', tipo: 'ventana', nombre: 'Ventana habitación', ancho: 1.20, alto: 1.20, cantidad: 1 }]; }}>Habitación</button>
+            <button onclick={() => { wallOptions.width = 1.2; wallOptions.height = 2.6; wallOptions.huecos = [{ id: crypto.randomUUID?.() ?? 'h1', tipo: 'puerta', nombre: 'Puerta pasillo', ancho: 0.82, alto: 2.10, cantidad: 1 }]; }}>Pasillo</button>
+            <button onclick={() => { wallOptions.width = 5; wallOptions.height = 3; wallOptions.huecos = [{ id: crypto.randomUUID?.() ?? 'h1', tipo: 'ventana', nombre: 'Ventana grande', ancho: 1.80, alto: 1.50, cantidad: 1 }, { id: crypto.randomUUID?.() ?? 'h2', tipo: 'puerta', nombre: 'Puerta salón', ancho: 0.82, alto: 2.10, cantidad: 1 }]; }}>Salón grande</button>
+          {:else if category === 'roof'}
+            <button onclick={() => { roofOptions.width = 3.5; roofOptions.length = 4; }}>Habitación</button>
+            <button onclick={() => { roofOptions.width = 1.5; roofOptions.length = 4; }}>Pasillo</button>
+            <button onclick={() => { roofOptions.width = 5; roofOptions.length = 6; }}>Salón grande</button>
+            <button onclick={() => { roofOptions.width = 8; roofOptions.length = 4; }}>Cocina office</button>
+          {:else if category === 'floor'}
+            <button onclick={() => { floorOptions.width = 3.5; floorOptions.length = 4; }}>Habitación</button>
+            <button onclick={() => { floorOptions.width = 1.5; floorOptions.length = 4; }}>Pasillo</button>
+            <button onclick={() => { floorOptions.width = 5; floorOptions.length = 6; }}>Salón grande</button>
           {:else}
-            <button onclick={() => { width = 3.5; height = 4; }}>Habitación</button>
-            <button onclick={() => { width = 1.5; height = 4; }}>Pasillo</button>
-            <button onclick={() => { width = 5; height = 6; }}>Salón grande</button>
-            <button onclick={() => { width = 8; height = 4; }}>Cocina office</button>
+            <button onclick={() => { bathOptions.width = 2; bathOptions.length = 2.5; bathOptions.wallHeight = 2.4; }}>Baño pequeño</button>
+            <button onclick={() => { bathOptions.width = 2.5; bathOptions.length = 3; bathOptions.wallHeight = 2.4; }}>Baño medio</button>
+            <button onclick={() => { bathOptions.width = 3; bathOptions.length = 3.5; bathOptions.wallHeight = 2.4; }}>Baño grande</button>
           {/if}
         </div>
-        <div class="area-note"><span>{category === 'roof' ? '▭' : '▧'}</span><strong>Superficie a cubrir</strong><b>{result.area.toFixed(2)} m²</b></div>
+        <div class="area-note"><span>{category === 'roof' ? '▭' : category === 'floor' ? '▤' : category === 'bath' ? '◆' : '▧'}</span><strong>Superficie total</strong><b>{(category === 'wall' ? result.area : category === 'floor' ? result.area : category === 'bath' ? result.area : result.area).toFixed(2)} m²</b></div>
         <div class="step-nav"><button class="ghost" onclick={back}>← Atrás</button><button class="primary" onclick={next}>Calcular →</button></div>
       </section>
     {/if}
@@ -572,20 +983,20 @@
           <div>
             <p class="eyebrow light">ESTIMACIÓN DEL PROYECTO</p>
             <h2>{projectName || 'Tu lista de compra'}</h2>
-            <p>{category === 'roof' ? 'Techo' : 'Pared'} de {result.area.toFixed(2)} m² · {systemPrettyLabel(kind)}</p>
+            <p>{categoryPrettyName()} de {result.area.toFixed(2)} m² · {systemPrettyLabel(kind)}</p>
           </div>
           <span class="step-badge light-badge">3/3</span>
         </div>
         <div class="stats">
           <div><span>Materiales</span><strong>{euro(result.total)}</strong><small>Precios estimados</small></div>
-          {#if laborOn}<div><span>Mano de obra</span><strong>{euro(result.labor)}</strong><small>{getLaborInfo().precioM2} €/m²</small></div>{/if}
+          {#if result.labor > 0}<div><span>Mano de obra</span><strong>{euro(result.labor)}</strong><small>Precio orientativo</small></div>{/if}
           <div><span>Total</span><strong>{euro(result.grandTotal)}</strong><small>Materiales + obra</small></div>
           <div><span>Tiempo</span><strong>{result.hours.toFixed(1)} h</strong><small>Rendimiento orientativo</small></div>
         </div>
         <div class="shopping-list">
           {#each result.lines as line}
             <div class="material-row">
-              <div class="material-icon">{line.material.categoria === 'techo' ? '▭' : line.material.categoria === 'drywall' ? '▧' : '▤'}</div>
+              <div class="material-icon">{iconForCategoria(line.material.categoria)}</div>
               <div class="material-name"><strong>{line.material.nombre}</strong><small>{line.detail} · {euro(line.material.precio)} / {line.material.unidad}</small></div>
               <b class="qty">{line.quantity} {line.material.unidad === 'unidad' ? 'uds.' : line.material.unidad}s</b>
               <span class="price">{euro(line.total)}</span>
@@ -600,9 +1011,12 @@
           <button onclick={handleCopyJson}>⧉ Copiar JSON</button>
           <button onclick={handleExportRCX} title="Descargar proyecto en el estándar RCX (.rcx.json)">⇩ Exportar a RCX</button>
           <button onclick={handleCopyRCX} title="Copiar proyecto en el estándar RCX">⧉ Copiar RCX</button>
+          <button onclick={handleExportCSV} title="Descargar lista de materiales en CSV (Excel)">⇩ Exportar CSV</button>
+          <button onclick={handleCopyCSV} title="Copiar CSV al portapapeles">⧉ Copiar CSV</button>
+          <button onclick={handleShareUrl} title="Copiar URL compartible del proyecto">🔗 Compartir enlace</button>
         </div>
         <div class="step-nav"><button class="ghost" onclick={back}>← Atrás</button><button class="primary" onclick={() => (step = 2)}>Modificar medidas</button></div>
-        <div class="notice"><span>i</span><p>Estimación orientativa con precios de referencia de Obramat (actualizados {materials.meta.fechaActualizacion}). Incluye merma y consumos técnicos. Mano de obra orientativa; verifica precios y stock en tu almacén.</p></div>
+        <div class="notice"><span>i</span><p>Estimación orientativa con precios de referencia de Obramat y Leroy Merlin (actualizados {catalogMeta().fechaActualizacion}). Incluye merma y consumos técnicos. Mano de obra orientativa; verifica precios y stock en tu almacén.</p></div>
       </section>
     {/if}
     {/if}
@@ -663,7 +1077,6 @@
   }
   .menu-card.enabled:hover { transform: translateY(-2px); border-color: #b8cd25; box-shadow: 0 6px 18px #25343b10; }
   .menu-card.enabled:hover .menu-arrow { color: #31400d; transform: translateX(2px); }
-  .menu-card:disabled { cursor: not-allowed; }
   .menu-icon {
     width: 44px; height: 44px;
     border-radius: 12px;
@@ -673,21 +1086,15 @@
     flex: none;
   }
   .menu-icon svg { width: 24px; height: 24px; }
-  .menu-card:disabled .menu-icon { background: #f1f3f4; color: #a9b4b7; }
   .menu-text { display: grid; gap: 3px; min-width: 0; }
   .menu-text strong { font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: #172126; }
   .menu-text small { font-size: 12.5px; color: #79878c; line-height: 1.35; }
-  .menu-card:disabled .menu-text strong { color: #b1bbbe; }
   .menu-arrow { font-size: 20px; color: #98a3a6; font-weight: 700; transition: transform .2s, color .2s; }
-  .menu-soon { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; color: #98a3a6; }
   :global(body.dark) .menu-card { background: #182328; border-color: #2a383b; }
   :global(body.dark) .menu-text strong { color: #e7eef0; }
   :global(body.dark) .menu-text small { color: #8a999c; }
-  :global(body.dark) .menu-card:disabled .menu-text strong { color: #58676d; }
   :global(body.dark) .menu-icon { background: #1d2a3a; color: #6da4ff; }
-  :global(body.dark) .menu-card:disabled .menu-icon { background: #1f2a2c; color: #58676d; }
-  :global(body.dark) .menu-eyebrow { color: #6b7a7d; }
-  :global(body.dark) .menu-arrow, :global(body.dark) .menu-soon { color: #58676d; }
+  :global(body.dark) .menu-arrow { color: #58676d; }
   .intro { min-height: 170px; display:flex; justify-content:space-between; align-items:center; overflow:hidden; }
   .eyebrow { color:#87949a; font-size:11px; letter-spacing:1.8px; font-weight:800; margin:0 0 12px; }
   .intro h1 { font-size:clamp(30px, 5vw, 52px); line-height:1; letter-spacing:-2px; margin:0; }
@@ -752,6 +1159,31 @@
   .stepper-input input::-webkit-outer-spin-button, .stepper-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin:0; }
   .times {color:#bdc6c7;text-align:center;padding-bottom:12px;font-size:20px;}
   .opening-field {max-width:480px;margin-top:16px;}
+
+  .huecos-section { margin-top: 18px; padding: 14px; border: 1px dashed #dde5e6; border-radius: 12px; max-width: 640px; }
+  .huecos-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .huecos-title { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; color: #77868b; }
+  .huecos-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .hueco-row { display: grid; grid-template-columns: 100px 1fr repeat(3, 90px) 30px; gap: 6px; align-items: center; }
+  .hueco-row select, .hueco-row input[type="text"], .hueco-row input[type="number"] {
+    border: 1px solid #dce4e5; border-radius: 8px; padding: 7px 9px; font-size: 12px; background: white; color: #25353a; outline-color: #b8cd25; min-width: 0;
+  }
+  .hueco-nombre { font-weight: 600; }
+  .hueco-dim { display: grid; gap: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.6px; color: #87949a; }
+  .hueco-dim input { font-size: 13px; font-weight: 700; text-align: center; }
+  .hueco-del { background: #fdecec; border: 1px solid #f5c2c2; color: #b03030; border-radius: 8px; cursor: pointer; height: 30px; font-size: 18px; line-height: 1; }
+  .hueco-del:hover { background: #fbd5d5; }
+  .huecos-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .huecos-actions select, .huecos-actions .ghost-btn { border: 1px solid #dde5e6; border-radius: 20px; padding: 6px 12px; font-size: 12px; background: white; color: #46545a; cursor: pointer; font-weight: 600; }
+  .huecos-actions .ghost-btn:hover { background: #f6f9e9; border-color: #b8cd25; }
+  .merma-field { display: block; margin-top: 14px; }
+  .merma-field span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; color: #77868b; }
+  .merma-field input[type="range"] { display: block; width: 100%; margin-top: 8px; accent-color: #d7ef4a; }
+  :global(body.dark) .huecos-section { border-color: #2a383b; background: #0f1719; }
+  :global(body.dark) .hueco-row select, :global(body.dark) .hueco-row input { background: #182328; border-color: #2a383b; color: #e7eef0; }
+  :global(body.dark) .hueco-del { background: #3a1212; border-color: #7a1f1f; color: #ffb4a2; }
+  :global(body.dark) .huecos-actions select, :global(body.dark) .huecos-actions .ghost-btn { background: #182328; border-color: #2a383b; color: #aab8ba; }
+  :global(body.dark) .huecos-actions .ghost-btn:hover { background: #1d2a17; border-color: #b8cd25; color: #d7ef4a; }
 
   .hint { display:block; margin-top:6px; font-size:11px; color:#79878c; line-height:1.4; }
   .roof-hint { max-width:480px; margin-top:14px; padding:10px 12px; background:#f6f9e9; border-radius:9px; color:#54620e; font-size:12px; }
@@ -854,6 +1286,26 @@
   :global(body.dark) .toast.error { background: #3a1212; border-color: #7a1f1f; }
   @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
+  @media print {
+    :global(body) { background: white !important; color: black !important; }
+    :global(.topbar), :global(.app-shell footer), :global(.header-actions), :global(.import-btn), :global(.intro), :global(.stepper), :global(.toast), :global(.step-nav) { display: none !important; }
+    :global(.menu-screen) { display: none !important; }
+    .app-shell { max-width: 100% !important; padding: 0 !important; }
+    .result-card { background: white !important; color: black !important; border: 1px solid #ccc !important; padding: 16px !important; box-shadow: none !important; page-break-inside: avoid; }
+    .result-card h2 { color: black !important; }
+    .eyebrow.light { color: #555 !important; }
+    .light-badge { background: #eee !important; color: #31400d !important; border: 1px solid #ccc; }
+    .stats { border-color: #ddd !important; }
+    .stats strong { color: black !important; }
+    .material-row { color: black !important; border-color: #ddd !important; }
+    .material-row:hover { background: transparent !important; }
+    .material-icon { background: #f0f0f0 !important; color: #31400d !important; }
+    .material-name strong, .material-row .qty, .material-row .price { color: black !important; }
+    .actions { display: none !important; }
+    .notice { background: #f5f5f5 !important; color: #333 !important; }
+    .notice span { color: #31400d !important; border-color: #31400d !important; }
+  }
+
   @media (max-width: 700px) {
     .app-shell {padding:0 16px;}
     .menu-card { grid-template-columns: 44px 1fr auto; padding: 14px 14px; gap: 14px; border-radius: 14px; }
@@ -861,7 +1313,6 @@
     .menu-icon svg { width: 20px; height: 20px; }
     .menu-text strong { font-size: 14px; }
     .menu-text small { font-size: 11.5px; }
-    .menu-soon { font-size: 9px; }
     .intro{min-height:0;flex-direction:column;align-items:flex-start;gap:10px;}
     .hero-art{display:none;}
     .intro h1{font-size:30px;letter-spacing:-1.5px;}

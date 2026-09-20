@@ -12,8 +12,8 @@
  */
 
 import rcxExporter from './rcxExporter.js';
+import csvExporter from './future/csvExporter.js';
 // Los siguientes exportadores se registrarán cuando estén implementados:
-// import csvExporter from './future/csvExporter.js';
 // import excelExporter from './future/excelExporter.js';
 // import pdfExporter from './future/pdfExporter.js';
 
@@ -24,8 +24,8 @@ import rcxExporter from './rcxExporter.js';
  * @type {import('./rcxExporter.js').ExporterInterface[]}
  */
 const exporters = [
-  rcxExporter
-  // csvExporter,
+  rcxExporter,
+  csvExporter
   // excelExporter,
   // pdfExporter
 ];

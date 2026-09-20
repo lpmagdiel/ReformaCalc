@@ -17,6 +17,9 @@
   <header class="topbar">
     <a class="logo" href="/" aria-label="Inicio"><span class="brand-mark">R</span><span class="brand-name">Reforma<span class="brand-accent">Calc</span></span></a>
     <div class="header-actions">
+      <a class="icon-btn" href="/proyectos" aria-label="Historial de proyectos" title="Historial">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg>
+      </a>
       <a class="icon-btn" href="/buscar" aria-label="Buscar precios">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       </a>

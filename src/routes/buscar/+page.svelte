@@ -1,26 +1,77 @@
 <script lang="ts">
-  import products from '$lib/materials.json';
+  import { catalog, materiales, proveedores, proveedorNombre } from '$lib/data/db';
+  import type { Material, Categoria } from '$lib/calc/types';
 
-  type Product = (typeof products.materials)[number];
-  type Supplier = (typeof products.suppliers)[number];
+  type Product = Material;
 
-  const categoryLabels: Record<string, string> = {
-    drywall: 'Drywall',
-    block: 'Bloque',
-    brick: 'Ladrillo'
-  };
+  const CATEGORIAS_MOSTRADAS: Categoria[] = [
+    'placa',
+    'perfil',
+    'tornilleria',
+    'consumible',
+    'aislamiento',
+    'bloque',
+    'ladrillo',
+    'albanileria',
+    'cuelgue',
+    'panel',
+    'suelo',
+    'azulejo',
+    'baldosa',
+    'adhesivo',
+    'microcemento',
+    'sanitario',
+    'griferia',
+    'mampara',
+    'fontaneria',
+    'pintura',
+    'demolicion',
+    'mueble',
+    'acabado',
+    'herramienta'
+  ];
+
+  const categoryLabels: Record<string, string> = Object.fromEntries(
+    CATEGORIAS_MOSTRADAS.map((cat) => [cat, etiquetaCategoria(cat)])
+  );
+
+  function etiquetaCategoria(cat: Categoria): string {
+    const map: Record<Categoria, string> = {
+      placa: 'Placa',
+      perfil: 'Perfil',
+      tornilleria: 'Tornillería',
+      consumible: 'Consumible',
+      aislamiento: 'Aislamiento',
+      bloque: 'Bloque',
+      ladrillo: 'Ladrillo',
+      albanileria: 'Albañilería',
+      cuelgue: 'Cuelgue',
+      panel: 'Panel',
+      suelo: 'Suelo',
+      acabado: 'Acabado',
+      azulejo: 'Azulejo',
+      baldosa: 'Baldosa',
+      adhesivo: 'Adhesivo',
+      microcemento: 'Microcemento',
+      demolicion: 'Demolición',
+      herramienta: 'Herramienta',
+      fontaneria: 'Fontanería',
+      sanitario: 'Sanitario',
+      mueble: 'Mueble',
+      mampara: 'Mampara',
+      griferia: 'Grifería',
+      pintura: 'Pintura'
+    };
+    return map[cat];
+  }
 
   let productQuery = $state('');
   let productCategory = $state<'all' | string>('all');
   let productSupplier = $state<'all' | string>('all');
 
-  const allCategories = Array.from(new Set(products.materials.map((p) => p.category)));
-  const allSuppliers = products.suppliers as Supplier[];
-
-  function supplierName(id?: string) {
-    if (!id) return null;
-    return allSuppliers.find((s) => s.id === id)?.name ?? id;
-  }
+  const allProducts = materiales();
+  const allCategories = Array.from(new Set(allProducts.map((p) => p.categoria)));
+  const allSuppliers = proveedores();
 
   function normalize(value: string) {
     return value
@@ -31,22 +82,33 @@
 
   let filteredProducts = $derived.by(() => {
     const q = normalize(productQuery.trim());
-    return products.materials.filter((p: Product) => {
-      if (productCategory !== 'all' && p.category !== productCategory) return false;
-      if (productSupplier !== 'all' && p.supplier !== productSupplier) return false;
+    return allProducts.filter((p: Product) => {
+      if (productCategory !== 'all' && p.categoria !== productCategory) return false;
+      if (productSupplier !== 'all' && p.proveedor !== productSupplier) return false;
       if (!q) return true;
       return (
-        normalize(p.name).includes(q) ||
-        normalize(p.category).includes(q) ||
-        normalize(p.unit).includes(q) ||
-        normalize(categoryLabels[p.category] ?? '').includes(q) ||
-        normalize(supplierName(p.supplier) ?? '').includes(q)
+        normalize(p.nombre).includes(q) ||
+        normalize(p.categoria).includes(q) ||
+        normalize(p.unidad).includes(q) ||
+        normalize(categoryLabels[p.categoria] ?? '').includes(q) ||
+        normalize(proveedorNombre(p.proveedor)).includes(q)
       );
     });
   });
 
   function priceFormat(value: number) {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: catalog.meta.moneda }).format(value);
+  }
+
+  function coverage(material: Product): string {
+    const parts: string[] = [];
+    if (material.superficieM2) parts.push(`Rinde ${material.superficieM2} m²`);
+    if (material.longitudM) parts.push(`${material.longitudM} m`);
+    if (material.udsPorEnvase) parts.push(`${material.udsPorEnvase} uds/envase`);
+    if (material.kgPorEnvase) parts.push(`${material.kgPorEnvase} kg/envase`);
+    if (material.volumenM3) parts.push(`${material.volumenM3} m³`);
+    if (material.volumenLitros) parts.push(`${material.volumenLitros} L`);
+    return parts.join(' · ');
   }
 </script>
 
@@ -91,7 +153,7 @@
         <button role="tab" class:active={productSupplier === 'all'} onclick={() => (productSupplier = 'all')}>Todos los proveedores</button>
         {#each allSuppliers as supplier}
           <button role="tab" class:active={productSupplier === supplier.id} onclick={() => (productSupplier = supplier.id)}>
-            {supplier.name}
+            {supplier.nombre}
           </button>
         {/each}
       </div>
@@ -99,8 +161,8 @@
   </div>
 
   <div class="product-meta">
-    <span>{filteredProducts.length} de {products.materials.length} productos</span>
-    <small>Fuentes: {allSuppliers.map((s) => s.name).join(' · ')}</small>
+    <span>{filteredProducts.length} de {allProducts.length} productos</span>
+    <small>Fuentes: {allSuppliers.map((s) => s.nombre).join(' · ')}</small>
   </div>
 
   {#if filteredProducts.length === 0}
@@ -115,17 +177,17 @@
         <li class="product-row">
           <div class="product-info">
             <div class="product-tags">
-              <span class="product-tag">{categoryLabels[product.category] ?? product.category}</span>
-              {#if product.supplier}
-                <span class="product-supplier" class:leroy={product.supplier === 'leroymerlin'}>{supplierName(product.supplier)}</span>
+              <span class="product-tag">{categoryLabels[product.categoria] ?? product.categoria}</span>
+              {#if product.proveedor}
+                <span class="product-supplier" class:leroy={product.proveedor === 'leroymerlin'}>{proveedorNombre(product.proveedor)}</span>
               {/if}
             </div>
-            <strong>{product.name}</strong>
-            <small>Unidad: {product.unit}{product.coverageM2 ? ` · Rinde ${product.coverageM2} m²` : ''}{product.lengthM ? ` · ${product.lengthM} m` : ''}</small>
+            <strong>{product.nombre}</strong>
+            <small>Unidad: {product.unidad}{coverage(product) ? ` · ${coverage(product)}` : ''}</small>
           </div>
           <div class="product-price">
-            <strong>{priceFormat(product.price)}</strong>
-            <small>/ {product.unit}</small>
+            <strong>{priceFormat(product.precio)}</strong>
+            <small>/ {product.unidad}</small>
           </div>
           {#if product.sourceUrl}
             <a class="product-link" href={product.sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="Ver fuente del producto">↗</a>

@@ -187,7 +187,8 @@ const REQUIRED_APP_DATA_FIELDS = ['title'];
  * @typedef {Object} ExportOptions
  * @property {('object'|'json')} [output] Formato de salida. Por defecto `'object'`.
  * @property {number} [spaces] Número de espacios para indentar el JSON. Por defecto `2`.
- * @property {AppMetadata} [appMetadata] Metadatos de la app origen.
+ * @property {AppMetadata} [appMetadata] Metadatos de la app que exporta.
+ * @property {string} [filename] Nombre del archivo para la descarga.
  */
 
 /**
