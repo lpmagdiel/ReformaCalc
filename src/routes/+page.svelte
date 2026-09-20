@@ -164,6 +164,7 @@
     void roofOptions;
     void floorOptions;
     void bathOptions;
+    syncKindIntoOptions();
     schedulePersist();
   });
 
@@ -195,8 +196,33 @@
       wallOptions = { ...WALL_DEFAULTS };
       kind = 'drywall';
     }
+    syncKindIntoOptions();
     step = 1;
     menu = 'wizard';
+  }
+
+  /**
+   * Sincroniza el `kind` global con el campo `kind` específico de cada
+   * sistema. Sin esto, los módulos de cálculo reciben el `kind` antiguo y
+   * siempre devuelven la misma lista de materiales.
+   */
+  function syncKindIntoOptions() {
+    if (category === 'wall') {
+      const next: WallKind = (kind === 'block' || kind === 'ladrillo') ? kind : 'drywall';
+      if (wallOptions.kind !== next) {
+        wallOptions = { ...wallOptions, kind: next };
+      }
+    } else if (category === 'roof') {
+      const next: RoofKind = kind === 'desmontable' ? 'desmontable' : 'continuo';
+      if (roofOptions.kind !== next) {
+        roofOptions = { ...roofOptions, kind: next };
+      }
+    } else if (category === 'floor') {
+      const next: FloorKind = (kind === 'ceramica' || kind === 'microcemento') ? kind : 'tarima';
+      if (floorOptions.kind !== next) {
+        floorOptions = { ...floorOptions, kind: next };
+      }
+    }
   }
 
   function goHome() {
@@ -762,7 +788,7 @@
       <section class="card step-pane">
         <div class="section-heading"><div><p class="eyebrow">PASO 01</p><h2>{categoryPrettyName()} · ¿Qué tipo?</h2></div><span class="step-badge">1/3</span></div>
         {#if kinds.length > 1}
-          <div class="kind-grid">{#each kinds as option}<button class:chosen={kind === option.id} class="kind" onclick={() => { kind = option.id; }}><span class="kind-icon">{option.icon}</span><strong>{option.label}</strong><small>{option.subtitle}</small>{#if kind === option.id}<b class="check">✓</b>{/if}</button>{/each}</div>
+          <div class="kind-grid">{#each kinds as option}<button class:chosen={kind === option.id} class="kind" onclick={() => { kind = option.id; syncKindIntoOptions(); }}><span class="kind-icon">{option.icon}</span><strong>{option.label}</strong><small>{option.subtitle}</small>{#if kind === option.id}<b class="check">✓</b>{/if}</button>{/each}</div>
         {/if}
 
         {#if category === 'wall'}

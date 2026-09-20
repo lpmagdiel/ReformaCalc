@@ -26,6 +26,17 @@ describe('wall', () => {
     expect(r.lines.some((l) => l.material.id === 'bloque_hormigon_15')).toBe(true);
   });
 
+  it('cambiar kind de pared cambia materiales', () => {
+    const drywall = calculateWall({ ...WALL_DEFAULTS, kind: 'drywall', width: 3, height: 2.5, huecos: [] });
+    const block = calculateWall({ ...WALL_DEFAULTS, kind: 'block', width: 3, height: 2.5, huecos: [] });
+    const ladrillo = calculateWall({ ...WALL_DEFAULTS, kind: 'ladrillo', width: 3, height: 2.5, huecos: [] });
+    expect(drywall.lines.some((l) => l.material.id === 'placa_yeso_estandar')).toBe(true);
+    expect(block.lines.some((l) => l.material.id === 'bloque_hormigon_15')).toBe(true);
+    expect(ladrillo.lines.some((l) => l.material.id === 'ladrillo_hueco_doble')).toBe(true);
+    expect(drywall.lines.some((l) => l.material.id === 'bloque_hormigon_15')).toBe(false);
+    expect(block.lines.some((l) => l.material.id === 'ladrillo_hueco_doble')).toBe(false);
+  });
+
   it('merma adicional aumenta cantidades', () => {
     const base = calculateWall({ ...WALL_DEFAULTS, kind: 'drywall', width: 3, height: 2.5, huecos: [], merma: 0 });
     const conMerma = calculateWall({ ...WALL_DEFAULTS, kind: 'drywall', width: 3, height: 2.5, huecos: [], merma: 0.10 });
@@ -59,6 +70,13 @@ describe('roof', () => {
     expect(r.lines.some((l) => l.material.id === 'perfil_T_primario_24')).toBe(true);
     expect(r.lines.some((l) => l.material.id === 'panel_acustico_60x60')).toBe(true);
   });
+
+  it('cambiar kind de techo cambia materiales', () => {
+    const continuo = calculateRoof({ ...ROOF_DEFAULTS, kind: 'continuo', width: 4, length: 3 });
+    const desmontable = calculateRoof({ ...ROOF_DEFAULTS, kind: 'desmontable', width: 4, length: 3 });
+    expect(continuo.lines.some((l) => l.material.id === 'panel_acustico_60x60')).toBe(false);
+    expect(desmontable.lines.some((l) => l.material.id === 'perfil_omega_47')).toBe(false);
+  });
 });
 
 describe('floor', () => {
@@ -78,6 +96,21 @@ describe('floor', () => {
     const r = calculateFloor({ ...FLOOR_DEFAULTS, kind: 'microcemento', width: 4, length: 5 });
     expect(r.lines.some((l) => l.material.id === 'barniz_poliuretano_micro')).toBe(true);
     expect(r.lines.some((l) => l.material.id === 'microcemento_base')).toBe(true);
+  });
+
+  it('cambiar kind cambia materiales (no son siempre los mismos)', () => {
+    const tarima = calculateFloor({ ...FLOOR_DEFAULTS, kind: 'tarima', width: 4, length: 5 });
+    const ceramica = calculateFloor({ ...FLOOR_DEFAULTS, kind: 'ceramica', width: 4, length: 5 });
+    const micro = calculateFloor({ ...FLOOR_DEFAULTS, kind: 'microcemento', width: 4, length: 5 });
+    const idsTarima = tarima.lines.map((l) => l.material.id).sort();
+    const idsCeramica = ceramica.lines.map((l) => l.material.id).sort();
+    const idsMicro = micro.lines.map((l) => l.material.id).sort();
+    expect(idsTarima).not.toEqual(idsCeramica);
+    expect(idsCeramica).not.toEqual(idsMicro);
+    expect(idsTarima).not.toEqual(idsMicro);
+    expect(idsTarima.some((id) => id.startsWith('tarima_'))).toBe(true);
+    expect(idsCeramica.some((id) => id === 'azulejo_30x60' || id === 'gres_porcelanico_60x60')).toBe(true);
+    expect(idsMicro.some((id) => id === 'microcemento_base')).toBe(true);
   });
 });
 
