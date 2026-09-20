@@ -10,7 +10,7 @@ return {
 	assets: new Set(["manifest.webmanifest","robots.txt","sw.js"]),
 	mimeTypes: {".webmanifest":"application/manifest+json",".txt":"text/plain",".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.BWJGy_iQ.js",app:"_app/immutable/entry/app.Dktg-3vJ.js",imports:["_app/immutable/entry/start.BWJGy_iQ.js","_app/immutable/chunks/DFXPSqgE.js","_app/immutable/chunks/D6ryFyCZ.js","_app/immutable/entry/app.Dktg-3vJ.js","_app/immutable/chunks/D6ryFyCZ.js","_app/immutable/chunks/xihTtKlq.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.CzQ_q7Tv.js",app:"_app/immutable/entry/app.BaM1rzXX.js",imports:["_app/immutable/entry/start.CzQ_q7Tv.js","_app/immutable/chunks/B9JM69NW.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/entry/app.BaM1rzXX.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/chunks/xihTtKlq.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),

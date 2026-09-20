@@ -97,7 +97,6 @@ declare module '$env/static/private' {
 	export const INSIDE_NAUTILUS_PYTHON: string;
 	export const npm_package_version: string;
 	export const npm_lifecycle_event: string;
-	export const NODE_PATH: string;
 	export const QT_ACCESSIBILITY: string;
 	export const GDMSESSION: string;
 	export const LESSCLOSE: string;
@@ -262,7 +261,6 @@ declare module '$env/dynamic/private' {
 		INSIDE_NAUTILUS_PYTHON: string;
 		npm_package_version: string;
 		npm_lifecycle_event: string;
-		NODE_PATH: string;
 		QT_ACCESSIBILITY: string;
 		GDMSESSION: string;
 		LESSCLOSE: string;

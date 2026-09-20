@@ -3,7 +3,7 @@ import root from '../root.js';
 import { set_building, set_prerendering } from '$app/env/internal';
 import { set_assets } from '$app/paths/internal/server';
 import { set_manifest, set_read_implementation } from '__sveltekit/server';
-import { set_private_env, set_public_env } from '../../../node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/shared-server.js';
+import { set_private_env, set_public_env } from '../../../node_modules/@sveltejs/kit/src/runtime/shared-server.js';
 import error from '../shared/error-template.js';
 
 export const options = {
@@ -26,7 +26,7 @@ export const options = {
 		app: ({ head, body, assets, nonce, env }) => "<!doctype html>\n<html lang=\"en\">\n\t<head>\n\t\t<meta charset=\"utf-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\t\t<meta name=\"text-scale\" content=\"scale\" />\n\t\t" + head + "\n\t</head>\n\t<body data-sveltekit-preload-data=\"hover\">\n\t\t<div style=\"display: contents\">" + body + "</div>\n\t</body>\n</html>\n",
 		error
 	},
-	version_hash: "5dfkgn"
+	version_hash: "xpj9ui"
 };
 
 export async function get_hooks() {

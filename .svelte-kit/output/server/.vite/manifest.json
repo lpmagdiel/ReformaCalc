@@ -9,6 +9,10 @@
       "_internal2.js"
     ]
   },
+  "_db.js": {
+    "file": "chunks/db.js",
+    "name": "db"
+  },
   "_env.js": {
     "file": "chunks/env.js",
     "name": "env"
@@ -136,10 +140,11 @@
     "src": "src/routes/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_server.js"
+      "_server.js",
+      "_db.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.BMx3i0yD.css"
+      "_app/immutable/assets/_page.CRn2ab52.css"
     ]
   },
   "src/routes/buscar/+page.svelte": {
@@ -148,7 +153,8 @@
     "src": "src/routes/buscar/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_server.js"
+      "_server.js",
+      "_db.js"
     ],
     "css": [
       "_app/immutable/assets/_page.SVVZwvyH.css"
