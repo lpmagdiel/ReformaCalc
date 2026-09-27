@@ -39,24 +39,40 @@
     BATH_DEFAULTS,
     type BathOptions
   } from '$lib/calc/bath';
+  import {
+    calculateWelding,
+    WELDING_DEFAULTS,
+    PROCESS_META,
+    METAL_META,
+    JOINT_META,
+    POSITION_META,
+    diametrosDisponibles,
+    type WeldingOptions,
+    type WeldingProcess,
+    type BaseMetal,
+    type JointType,
+    type WeldingPosition,
+    type WeldingResult
+  } from '$lib/calc/welding';
   import type { CalculationResult, Line } from '$lib/calc/calc';
 
-  type Category = 'wall' | 'roof' | 'floor' | 'bath';
-  type Kind = WallKind | RoofKind | FloorKind | 'bano';
-  type WizardOptions = WallOptions | RoofOptions | FloorOptions | BathOptions;
+  type Category = 'wall' | 'roof' | 'floor' | 'bath' | 'welding';
+  type Kind = WallKind | RoofKind | FloorKind | 'bano' | WeldingProcess;
+  type WizardOptions = WallOptions | RoofOptions | FloorOptions | BathOptions | WeldingOptions;
 
   type MenuItem = {
     id: Category;
     title: string;
     subtitle: string;
-    icon: 'wall' | 'roof' | 'floor' | 'bath';
+    icon: 'wall' | 'roof' | 'floor' | 'bath' | 'welding';
   };
 
   const menuItems: MenuItem[] = [
     { id: 'wall', title: 'Pared simple', subtitle: 'Tabique de drywall, bloque o ladrillo', icon: 'wall' },
     { id: 'roof', title: 'Techo', subtitle: 'Falso techo continuo o desmontable', icon: 'roof' },
     { id: 'floor', title: 'Suelo', subtitle: 'Tarima, cerámica o microcemento', icon: 'floor' },
-    { id: 'bath', title: 'Baño completo', subtitle: 'Reforma integral de baño', icon: 'bath' }
+    { id: 'bath', title: 'Baño completo', subtitle: 'Reforma integral de baño', icon: 'bath' },
+    { id: 'welding', title: 'Soldadura', subtitle: 'Electrodo, MIG/MAG o TIG por metal y trabajo', icon: 'welding' }
   ];
 
   let menu: 'home' | 'wizard' = $state('home');
@@ -69,6 +85,7 @@
   let roofOptions: RoofOptions = $state({ ...ROOF_DEFAULTS });
   let floorOptions: FloorOptions = $state({ ...FLOOR_DEFAULTS });
   let bathOptions: BathOptions = $state({ ...BATH_DEFAULTS });
+  let weldingOptions: WeldingOptions = $state({ ...WELDING_DEFAULTS });
 
   let projectName = $state('Pared salón');
   let projectId = $state('');
@@ -108,6 +125,7 @@
       roofOptions,
       floorOptions,
       bathOptions,
+      weldingOptions,
       savedAt: new Date().toISOString()
     };
   }
@@ -141,6 +159,7 @@
       if (d.roofOptions) roofOptions = { ...ROOF_DEFAULTS, ...d.roofOptions };
       if (d.floorOptions) floorOptions = { ...FLOOR_DEFAULTS, ...d.floorOptions };
       if (d.bathOptions) bathOptions = { ...BATH_DEFAULTS, ...d.bathOptions };
+      if (d.weldingOptions) weldingOptions = { ...WELDING_DEFAULTS, ...d.weldingOptions };
       return true;
     } catch {
       return false;
@@ -164,6 +183,7 @@
     void roofOptions;
     void floorOptions;
     void bathOptions;
+    void weldingOptions;
     syncKindIntoOptions();
     schedulePersist();
   });
@@ -192,6 +212,9 @@
     } else if (selectedCategory === 'bath') {
       bathOptions = { ...BATH_DEFAULTS };
       kind = 'bano';
+    } else if (selectedCategory === 'welding') {
+      weldingOptions = { ...WELDING_DEFAULTS };
+      kind = 'smaw';
     } else {
       wallOptions = { ...WALL_DEFAULTS };
       kind = 'drywall';
@@ -222,6 +245,11 @@
       if (floorOptions.kind !== next) {
         floorOptions = { ...floorOptions, kind: next };
       }
+    } else if (category === 'welding') {
+      const next: WeldingProcess = (kind === 'gmaw' || kind === 'gtaw' || kind === 'fcaw') ? kind : 'smaw';
+      if (weldingOptions.process !== next) {
+        weldingOptions = { ...weldingOptions, process: next };
+      }
     }
   }
 
@@ -235,6 +263,7 @@
     roofOptions = { ...ROOF_DEFAULTS };
     floorOptions = { ...FLOOR_DEFAULTS };
     bathOptions = { ...BATH_DEFAULTS };
+    weldingOptions = { ...WELDING_DEFAULTS };
     category = 'wall';
     kind = 'drywall';
     step = 1;
@@ -273,14 +302,23 @@
     const cat: Category = category;
     if (cat === 'roof') return roofKinds;
     if (cat === 'floor') return floorKinds;
+    if (cat === 'welding') return weldingKinds;
     if (cat === 'bath') return [{ id: 'bano' as const, label: 'Integral', subtitle: 'Todos los bloques', icon: '▭' }];
     return wallKinds;
   });
+
+  const weldingKinds = (['smaw', 'gmaw', 'gtaw', 'fcaw'] as WeldingProcess[]).map((id) => ({
+    id,
+    label: PROCESS_META[id].label,
+    subtitle: PROCESS_META[id].subtitle,
+    icon: PROCESS_META[id].icon
+  }));
 
   let result: CalculationResult = $derived.by(() => {
     if (category === 'wall') return calculateWall(wallOptions);
     if (category === 'roof') return calculateRoof(roofOptions);
     if (category === 'floor') return calculateFloor(floorOptions);
+    if (category === 'welding') return calculateWelding(weldingOptions);
     return calculateBath(bathOptions);
   });
 
@@ -293,6 +331,9 @@
     if (cat === 'placa' || cat === 'perfil') return '▧';
     if (cat === 'sanitario' || cat === 'mueble') return '◆';
     if (cat === 'pintura' || cat === 'demolicion') return '◇';
+    if (cat === 'electrodo' || cat === 'hilo_soldadura') return '⌇';
+    if (cat === 'gas_soldadura') return '◌';
+    if (cat === 'epi') return '◉';
     return '▤';
   }
 
@@ -314,6 +355,11 @@
         return 'microcemento';
       case 'bano':
         return 'bano_alicatado';
+      case 'smaw':
+      case 'gmaw':
+      case 'gtaw':
+      case 'fcaw':
+        return 'welding';
     }
   }
 
@@ -328,6 +374,10 @@
       case 'ceramica': return 'Cerámica';
       case 'microcemento': return 'Microcemento';
       case 'bano': return 'Reforma integral de baño';
+      case 'smaw': return 'Soldadura por electrodo';
+      case 'gmaw': return 'Soldadura MIG/MAG';
+      case 'gtaw': return 'Soldadura TIG';
+      case 'fcaw': return 'Soldadura hilo tubular';
     }
   }
 
@@ -337,6 +387,7 @@
       case 'roof': return 'Techo';
       case 'floor': return 'Suelo';
       case 'bath': return 'Baño';
+      case 'welding': return 'Soldadura';
     }
   }
 
@@ -369,7 +420,8 @@
         wallOptions,
         roofOptions,
         floorOptions,
-        bathOptions
+        bathOptions,
+        weldingOptions
       };
       const json = JSON.stringify(snapshot);
       summary.snapshot = btoa(unescape(encodeURIComponent(json)));
@@ -397,7 +449,9 @@
           ? { width: roofOptions.width, height: roofOptions.length, area: result.area }
           : category === 'floor'
             ? { width: floorOptions.width, height: floorOptions.length, area: result.area }
-            : { width: bathOptions.width, height: bathOptions.length, area: result.area };
+            : category === 'welding'
+              ? { width: weldingOptions.thicknessMm, height: weldingOptions.totalLengthM, area: result.area }
+              : { width: bathOptions.width, height: bathOptions.length, area: result.area };
 
     const cfg =
       category === 'wall'
@@ -418,11 +472,17 @@
                 studSpacing: 0,
                 insulation: false
               }
-            : {
-                faces: 0,
-                studSpacing: 0,
-                insulation: false
-              };
+            : category === 'welding'
+              ? {
+                  faces: 0,
+                  studSpacing: 0,
+                  insulation: false
+                }
+              : {
+                  faces: 0,
+                  studSpacing: 0,
+                  insulation: false
+                };
 
     return {
       project: { id: projectId, name: projectName, description: '', createdAt, updatedAt: new Date().toISOString() },
@@ -476,7 +536,9 @@
             ? { width: roofOptions.width, height: roofOptions.length, length: 0 }
             : category === 'floor'
               ? { width: floorOptions.width, height: floorOptions.length, length: 0 }
-              : { width: bathOptions.width, height: bathOptions.length, length: bathOptions.wallHeight },
+              : category === 'welding'
+                ? { width: weldingOptions.thicknessMm, height: weldingOptions.totalLengthM, length: 0 }
+                : { width: bathOptions.width, height: bathOptions.length, length: bathOptions.wallHeight },
       estimatedHours: result.hours,
       materialsCost: round2(result.total),
       laborCost: round2(result.labor),
@@ -541,7 +603,8 @@
       wallOptions,
       roofOptions,
       floorOptions,
-      bathOptions
+      bathOptions,
+      weldingOptions
     };
     const json = JSON.stringify(snapshot);
     const b64 = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(json))) : '';
@@ -577,6 +640,7 @@
       if (data.roofOptions) roofOptions = { ...ROOF_DEFAULTS, ...data.roofOptions };
       if (data.floorOptions) floorOptions = { ...FLOOR_DEFAULTS, ...data.floorOptions };
       if (data.bathOptions) bathOptions = { ...BATH_DEFAULTS, ...data.bathOptions };
+      if (data.weldingOptions) weldingOptions = { ...WELDING_DEFAULTS, ...data.weldingOptions };
       return true;
     } catch {
       return false;
@@ -600,7 +664,15 @@
     tarima: 'tarima',
     ceramica: 'ceramica',
     microcemento: 'microcemento',
-    bano: 'bano'
+    bano: 'bano',
+    smaw: 'smaw',
+    gmaw: 'gmaw',
+    mig: 'gmaw',
+    mag: 'gmaw',
+    gtaw: 'gtaw',
+    tig: 'gtaw',
+    fcaw: 'fcaw',
+    welding: 'smaw'
   };
 
   const systemToCategory: Record<string, Category> = {
@@ -622,7 +694,16 @@
     microcemento: 'floor',
     bano: 'bath',
     bano_alicatado: 'bath',
-    bano_completo: 'bath'
+    bano_completo: 'bath',
+    smaw: 'welding',
+    gmaw: 'welding',
+    mig: 'welding',
+    mag: 'welding',
+    gtaw: 'welding',
+    tig: 'welding',
+    fcaw: 'welding',
+    welding: 'welding',
+    soldadura: 'welding'
   };
 
   function handleImportClick() {
@@ -654,7 +735,7 @@
     projectName = meta.name || projectName;
     const resolvedKind = systemToKind[calc.system] ?? kind;
     const resolvedCategory: Category =
-      (calc.category as Category) ?? systemToCategory[calc.system] ?? (resolvedKind === 'continuo' || resolvedKind === 'desmontable' ? 'roof' : resolvedKind === 'tarima' || resolvedKind === 'ceramica' || resolvedKind === 'microcemento' ? 'floor' : resolvedKind === 'bano' ? 'bath' : 'wall');
+      (calc.category as Category) ?? systemToCategory[calc.system] ?? (resolvedKind === 'continuo' || resolvedKind === 'desmontable' ? 'roof' : resolvedKind === 'tarima' || resolvedKind === 'ceramica' || resolvedKind === 'microcemento' ? 'floor' : resolvedKind === 'bano' ? 'bath' : (resolvedKind === 'smaw' || resolvedKind === 'gmaw' || resolvedKind === 'gtaw' || resolvedKind === 'fcaw') ? 'welding' : 'wall');
     category = resolvedCategory;
     kind = resolvedKind;
 
@@ -688,6 +769,14 @@
         kind: resolvedKind === 'ceramica' || resolvedKind === 'microcemento' ? resolvedKind : 'tarima',
         width: typeof dims.width === 'number' ? dims.width : floorOptions.width,
         length: typeof dims.height === 'number' ? dims.height : floorOptions.length,
+        laborOn: true
+      };
+    } else if (category === 'welding') {
+      weldingOptions = {
+        ...weldingOptions,
+        process: resolvedKind === 'gmaw' || resolvedKind === 'gtaw' || resolvedKind === 'fcaw' ? resolvedKind : 'smaw',
+        thicknessMm: typeof dims.width === 'number' ? dims.width : weldingOptions.thicknessMm,
+        totalLengthM: typeof dims.height === 'number' ? dims.height : weldingOptions.totalLengthM,
         laborOn: true
       };
     } else if (category === 'bath') {
@@ -750,6 +839,8 @@
                   <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="6" y="6" width="8" height="8"/><rect x="18" y="6" width="8" height="8"/><rect x="6" y="18" width="8" height="8"/><rect x="18" y="18" width="8" height="8"/></svg>
                 {:else if item.icon === 'bath'}
                   <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16h22v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5v-3z"/><path d="M9 16V8a3 3 0 0 1 6 0M7 11h2"/></svg>
+                {:else if item.icon === 'welding'}
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3v9"/><path d="m11 8 5 4 5-4"/><path d="M5 18h22"/><path d="M5 18v8a3 3 0 0 0 3 3h16a3 3 0 0 0 3-3v-8"/><circle cx="11" cy="25" r="1.5"/><circle cx="21" cy="25" r="1.5"/></svg>
                 {/if}
               </span>
               <span class="menu-text">
@@ -874,6 +965,35 @@
           <label class="toggle"><input type="checkbox" bind:checked={bathOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
         {/if}
 
+        {#if category === 'welding'}
+          <label class="select-label">METAL BASE
+            <select bind:value={weldingOptions.metal}>
+              {#each Object.values(METAL_META) as m}
+                <option value={m.id}>{m.label} · {m.note}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="select-label">TIPO DE JUNTA
+            <select bind:value={weldingOptions.joint}>
+              {#each Object.values(JOINT_META) as j}
+                <option value={j.id}>{j.label}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="select-label">POSICIÓN DE SOLDADURA
+            <select bind:value={weldingOptions.position}>
+              {#each Object.values(POSITION_META) as p}
+                <option value={p.id}>{p.label}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="merma-field">
+            <span>MERMA ADICIONAL <small>{((weldingOptions.merma ?? 0) * 100).toFixed(0)}% sobre el consumo teórico</small></span>
+            <input type="range" min="0" max="0.25" step="0.01" bind:value={weldingOptions.merma} />
+          </label>
+          <label class="toggle"><input type="checkbox" bind:checked={weldingOptions.laborOn} /><span class="track"><i></i></span><span>Incluir mano de obra</span></label>
+        {/if}
+
         <div class="step-nav"><span></span><button class="primary" onclick={next}>Siguiente →</button></div>
       </section>
     {/if}
@@ -884,6 +1004,7 @@
           {category === 'wall' ? 'Introduce las medidas' :
            category === 'roof' ? 'Medidas del techo' :
            category === 'floor' ? 'Medidas del suelo' :
+           category === 'welding' ? 'Espesor y longitud del cordón' :
            'Medidas del baño'}
         </h2></div><span class="step-badge muted">2/3</span></div>
         <div class="fields">
@@ -910,6 +1031,14 @@
             <span class="times">×</span>
             <label><span>LARGO <small>metros</small></span>
               <div class="stepper-input"><button onclick={() => floorOptions.length = Math.max(0.1, +(floorOptions.length - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={floorOptions.length} /><button onclick={() => floorOptions.length = +(floorOptions.length + 0.1).toFixed(2)}>+</button></div>
+            </label>
+          {:else if category === 'welding'}
+            <label><span>ESPESOR <small>milímetros</small></span>
+              <div class="stepper-input"><button onclick={() => weldingOptions.thicknessMm = Math.max(0.5, +(weldingOptions.thicknessMm - 0.5).toFixed(2))}>−</button><input type="number" min="0.5" max="40" step="0.5" bind:value={weldingOptions.thicknessMm} /><button onclick={() => weldingOptions.thicknessMm = Math.min(40, +(weldingOptions.thicknessMm + 0.5).toFixed(2))}>+</button></div>
+            </label>
+            <span class="times">×</span>
+            <label><span>LONGITUD CORDÓN <small>metros lineales</small></span>
+              <div class="stepper-input"><button onclick={() => weldingOptions.totalLengthM = Math.max(0.1, +(weldingOptions.totalLengthM - 0.1).toFixed(2))}>−</button><input type="number" min="0.1" step="0.1" bind:value={weldingOptions.totalLengthM} /><button onclick={() => weldingOptions.totalLengthM = +(weldingOptions.totalLengthM + 0.1).toFixed(2)}>+</button></div>
             </label>
           {:else}
             <label><span>ANCHO <small>metros</small></span>
@@ -974,6 +1103,16 @@
               </select>
             </label>
           {/if}
+        {:else if category === 'welding'}
+          <div class="welding-summary">
+            <p class="hint roof-hint">Indica el espesor del metal base y la longitud total del cordón. El cálculo selecciona automáticamente diámetro del electrodo, amperaje, voltaje, velocidad de avance, gas y potencia del equipo.</p>
+            <div class="welding-presets">
+              {#each diametrosDisponibles(weldingOptions.process, weldingOptions.metal, weldingOptions.thicknessMm) as d}
+                <button type="button" class:chosen={weldingOptions.diametroMm === d} onclick={() => weldingOptions.diametroMm = d}>⌀ {d} mm</button>
+              {/each}
+              <button type="button" class="ghost" onclick={() => weldingOptions.diametroMm = undefined}>Automático</button>
+            </div>
+          </div>
         {:else}
           <p class="hint roof-hint">Mide largo y ancho de la superficie. Se aplica un 10% de merma por cortes.</p>
         {/if}
@@ -992,13 +1131,18 @@
             <button onclick={() => { floorOptions.width = 3.5; floorOptions.length = 4; }}>Habitación</button>
             <button onclick={() => { floorOptions.width = 1.5; floorOptions.length = 4; }}>Pasillo</button>
             <button onclick={() => { floorOptions.width = 5; floorOptions.length = 6; }}>Salón grande</button>
+          {:else if category === 'welding'}
+            <button onclick={() => { weldingOptions.thicknessMm = 2; weldingOptions.totalLengthM = 0.5; }}>Chapa fina</button>
+            <button onclick={() => { weldingOptions.thicknessMm = 6; weldingOptions.totalLengthM = 1; }}>Estructura ligera</button>
+            <button onclick={() => { weldingOptions.thicknessMm = 10; weldingOptions.totalLengthM = 2; }}>Carpintería metálica</button>
+            <button onclick={() => { weldingOptions.thicknessMm = 20; weldingOptions.totalLengthM = 5; }}>Estructura pesada</button>
           {:else}
             <button onclick={() => { bathOptions.width = 2; bathOptions.length = 2.5; bathOptions.wallHeight = 2.4; }}>Baño pequeño</button>
             <button onclick={() => { bathOptions.width = 2.5; bathOptions.length = 3; bathOptions.wallHeight = 2.4; }}>Baño medio</button>
             <button onclick={() => { bathOptions.width = 3; bathOptions.length = 3.5; bathOptions.wallHeight = 2.4; }}>Baño grande</button>
           {/if}
         </div>
-        <div class="area-note"><span>{category === 'roof' ? '▭' : category === 'floor' ? '▤' : category === 'bath' ? '◆' : '▧'}</span><strong>Superficie total</strong><b>{(category === 'wall' ? result.area : category === 'floor' ? result.area : category === 'bath' ? result.area : result.area).toFixed(2)} m²</b></div>
+        <div class="area-note"><span>{category === 'roof' ? '▭' : category === 'floor' ? '▤' : category === 'bath' ? '◆' : category === 'welding' ? '⚡' : '▧'}</span><strong>{category === 'welding' ? 'Longitud total del cordón' : 'Superficie total'}</strong><b>{(category === 'wall' ? result.area : category === 'floor' ? result.area : category === 'bath' ? result.area : category === 'welding' ? weldingOptions.totalLengthM : result.area).toFixed(2)} {category === 'welding' ? 'm' : 'm²'}</b></div>
         <div class="step-nav"><button class="ghost" onclick={back}>← Atrás</button><button class="primary" onclick={next}>Calcular →</button></div>
       </section>
     {/if}
@@ -1009,10 +1153,37 @@
           <div>
             <p class="eyebrow light">ESTIMACIÓN DEL PROYECTO</p>
             <h2>{projectName || 'Tu lista de compra'}</h2>
-            <p>{categoryPrettyName()} de {result.area.toFixed(2)} m² · {systemPrettyLabel(kind)}</p>
+            <p>{categoryPrettyName()}{category === 'welding' ? ` · ${weldingOptions.totalLengthM.toFixed(2)} m de cordón` : ` de ${result.area.toFixed(2)} m²`} · {systemPrettyLabel(kind)}</p>
           </div>
           <span class="step-badge light-badge">3/3</span>
         </div>
+        {#if category === 'welding'}
+          {@const wres = result as WeldingResult}
+          <div class="welding-params">
+            <div class="welding-params-head">
+              <strong>Parámetros operativos</strong>
+              <small>Calculados según proceso, metal y espesor</small>
+            </div>
+            <div class="welding-grid">
+              <div><span>Intensidad</span><b>{wres.parametros.amperaje} A</b></div>
+              <div><span>Voltaje</span><b>{wres.parametros.voltaje} V</b></div>
+              <div><span>⌀ Electrodo / hilo</span><b>{wres.parametros.diametroMm} mm</b></div>
+              <div><span>Velocidad</span><b>{wres.parametros.velocidadCmMin} cm/min</b></div>
+              <div><span>Heat input</span><b>{wres.parametros.heatInput} kJ/mm</b></div>
+              <div><span>Potencia equipo</span><b>{wres.parametros.potenciaKVA} kVA</b></div>
+              {#if wres.parametros.gasFlujoLMin > 0}
+                <div><span>Caudal de gas</span><b>{wres.parametros.gasFlujoLMin} l/min</b></div>
+              {/if}
+              <div><span>Aporte necesario</span><b>{wres.parametros.aporteKg} kg</b></div>
+              <div><span>Tiempo total</span><b>{wres.parametros.horasTotales} h</b></div>
+            </div>
+            {#if wres.recomendaciones.length > 0}
+              <ul class="welding-tips">
+                {#each wres.recomendaciones as r}<li>{r}</li>{/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
         <div class="stats">
           <div><span>Materiales</span><strong>{euro(result.total)}</strong><small>Precios estimados</small></div>
           {#if result.labor > 0}<div><span>Mano de obra</span><strong>{euro(result.labor)}</strong><small>Precio orientativo</small></div>{/if}
@@ -1263,6 +1434,28 @@
   .actions button { background:#314144; border:1px solid #46555a; color:white; padding:9px 14px; border-radius:9px; cursor:pointer; font-size:12px; font-weight:700; transition:.2s; }
   .actions button:hover { background:#3d5054; transform: translateY(-1px); }
 
+  .welding-summary { max-width:560px; margin-top:16px; }
+  .welding-presets { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .welding-presets button { background:white; border:1px solid #dde5e6; color:#46545a; border-radius:18px; padding:5px 11px; font-size:12px; font-weight:600; cursor:pointer; transition:.2s; }
+  .welding-presets button:hover { background:#f6f9e9; border-color:#b8cd25; }
+  .welding-presets button.chosen { background:#fcfef2; border-color:#b8cd25; color:#31400d; }
+  .welding-presets button.ghost { font-style:italic; color:#79878c; }
+
+  .welding-params { margin:18px 0 4px; padding:14px 16px; border:1px solid #b8cd25; border-radius:14px; background:#fcfef2; }
+  :global(body.dark) .welding-params { background:#1d2a17; border-color:#3a4d0d; }
+  .welding-params-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .welding-params-head strong { font-size:13px; letter-spacing:.3px; color:#3f4b0c; }
+  :global(body.dark) .welding-params-head strong { color:#d7ef4a; }
+  .welding-params-head small { font-size:11px; color:#79878c; }
+  .welding-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px 14px; }
+  .welding-grid > div { display:grid; gap:2px; }
+  .welding-grid > div span { font-size:10px; letter-spacing:.8px; color:#79878c; text-transform:uppercase; font-weight:700; }
+  .welding-grid > div b { font-size:18px; color:#3f4b0c; letter-spacing:-.4px; }
+  :global(body.dark) .welding-grid > div b { color:#d7ef4a; }
+  .welding-tips { margin:14px 0 0; padding:10px 14px 10px 28px; background:#fff7d6; border:1px solid #f0d97a; border-radius:10px; font-size:12px; color:#5a4710; line-height:1.5; }
+  :global(body.dark) .welding-tips { background:#3a2e0d; border-color:#7a6210; color:#f0d97a; }
+  .welding-tips li { margin:3px 0; }
+
   .notice {display:flex;gap:9px;background:#29383b;border-radius:10px;padding:11px 12px;margin-top:14px;align-items:flex-start;}
   .notice span {border:1px solid #b7ce3b;color:#d7ef4a;border-radius:50%;width:16px;height:16px;display:grid;place-items:center;font-size:10px;flex:none;}
   .notice p {font-size:11px!important;line-height:1.4;}
@@ -1330,6 +1523,9 @@
     .actions { display: none !important; }
     .notice { background: #f5f5f5 !important; color: #333 !important; }
     .notice span { color: #31400d !important; border-color: #31400d !important; }
+    .welding-params { background: #f8f8f8 !important; border-color: #ccc !important; }
+    .welding-params-head strong, .welding-grid > div b { color: black !important; }
+    .welding-tips { background: #fff8e0 !important; color: #333 !important; border-color: #c0a040 !important; }
   }
 
   @media (max-width: 700px) {

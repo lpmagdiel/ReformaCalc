@@ -1,3 +1,4 @@
+import "../../chunks/index-server.js";
 import { b as escape_html, i as head, n as derived, r as ensure_array_like } from "../../chunks/server.js";
 import { a as meta, i as materialesPorSistema, n as material, t as catalog } from "../../chunks/db.js";
 Object.freeze({
@@ -12,11 +13,13 @@ function ceilWithWaste(value, waste = 0) {
 /**
 * Calcula el coste de mano de obra y horas a partir de la información del
 * sistema y del área. Devuelve 0 si `laborOn` es false.
+*
+* Si se pasa `laborRateOverride`, se usa en lugar del valor del catálogo.
 */
-function finalizeCalculation(area, lines, laborKey, laborOn) {
+function finalizeCalculation(area, lines, laborKey, laborOn, laborRateOverride) {
 	lines.forEach((line) => line.total = line.quantity * line.material.precio);
 	const laborInfo = catalog.manoObra[laborKey] ?? catalog.manoObra.drywall;
-	const laborRate = laborInfo.precioM2 ?? 0;
+	const laborRate = laborRateOverride ?? laborInfo.precioM2 ?? 0;
 	const labor = laborOn ? area * laborRate : 0;
 	const horasPorM2 = laborInfo.m2PorDia ? 8 / laborInfo.m2PorDia : 0;
 	const hours = Math.max(0, area * horasPorM2);
@@ -36,15 +39,22 @@ var WALL_DEFAULTS = {
 	kind: "drywall",
 	width: 3.2,
 	height: 2.6,
-	openings: 0,
+	huecos: [],
 	studSpacing: 60,
 	thickness: "M48",
 	withInsulation: true,
-	laborOn: true
+	laborOn: true,
+	merma: .05
 };
+/** Suma de m² a descontar por los huecos definidos. */
+function huecosArea(huecos) {
+	return huecos.reduce((sum, h) => sum + h.ancho * h.alto * h.cantidad, 0);
+}
 function calculateWall(options) {
-	const { kind, width, height, openings, studSpacing, withInsulation, laborOn } = options;
-	const area = Math.max(0, width * height - openings);
+	const { kind, width, height, huecos, studSpacing, withInsulation, laborOn, merma, laborRate } = options;
+	const openings = huecosArea(huecos);
+	const areaBruta = Math.max(0, width * height);
+	const area = Math.max(0, areaBruta - openings);
 	const lines = [];
 	if (kind === "drywall") {
 		const plates = material("placa_yeso_estandar");
@@ -56,14 +66,15 @@ function calculateWall(options) {
 		const joint = material("pasta_juntas");
 		const insulation = material("lana_mineral");
 		const consumos = catalog.consumos.drywall;
-		const plateCount = ceilWithWaste(area * 2 / Number(plates.superficieM2 ?? 1), Number(consumos.desperdicioPlacas ?? 0));
+		const wastePlates = Number(consumos.desperdicioPlacas ?? 0) + merma;
+		const plateCount = ceilWithWaste(area * 2 / Number(plates.superficieM2 ?? 1), wastePlates);
 		const studCount = Math.ceil(width / (studSpacing / 100)) + 1;
-		const trackCount = ceilWithWaste(width * 2 / Number(tracks.longitudM ?? 3), .08);
+		const trackCount = ceilWithWaste(width * 2 / Number(tracks.longitudM ?? 3), .08 + merma);
 		lines.push({
 			material: plates,
 			quantity: plateCount,
 			total: 0,
-			detail: "2 caras · 2,5 × 1,2 m"
+			detail: `2 caras · 2,5 × 1,2 m · merma ${(wastePlates * 100).toFixed(0)}%`
 		});
 		lines.push({
 			material: studs,
@@ -113,13 +124,13 @@ function calculateWall(options) {
 		const mortar = material("mortero_seco");
 		const consumos = catalog.consumos[wallKind] ?? {};
 		const udsPorM2 = Number(consumos.udsPorM2 ?? 0);
-		const desperdicio = Number(consumos.desperdicio ?? 0);
+		const desperdicio = Number(consumos.desperdicio ?? 0) + merma;
 		const morteroKgPorM2 = Number(consumos.morteroKgPorM2 ?? 0);
 		lines.push({
 			material: unit,
 			quantity: Math.ceil(area * udsPorM2 * (1 + desperdicio)),
 			total: 0,
-			detail: `${udsPorM2} uds./m² · ${unit.formato}`
+			detail: `${udsPorM2} uds./m² · merma ${(desperdicio * 100).toFixed(0)}%`
 		});
 		lines.push({
 			material: mortar,
@@ -128,7 +139,7 @@ function calculateWall(options) {
 			detail: `${morteroKgPorM2} kg/m² · ${mortar.formato}`
 		});
 	}
-	return finalizeCalculation(area, lines, kind, laborOn);
+	return finalizeCalculation(area, lines, kind, laborOn, laborRate);
 }
 //#endregion
 //#region src/lib/calc/roof.ts
@@ -175,6 +186,47 @@ var BATH_DEFAULTS = {
 	laborOn: true
 };
 //#endregion
+//#region src/lib/calc/welding.ts
+var WELDING_DEFAULTS = {
+	process: "smaw",
+	metal: "acero_carbono",
+	thicknessMm: 6,
+	joint: "angulo_t",
+	position: "horizontal",
+	totalLengthM: 1,
+	consumibleId: "electrodo_e7018_2_5mm",
+	gasId: "argón_11",
+	laborOn: true,
+	merma: .1
+};
+/** Tabla de identificación de procesos (etiqueta + icono breve). */
+var PROCESS_META = {
+	smaw: {
+		id: "smaw",
+		label: "Electrodo (SMAW)",
+		subtitle: "Stick · electrodo revestido",
+		icon: "⚡"
+	},
+	gmaw: {
+		id: "gmaw",
+		label: "MIG/MAG (GMAW)",
+		subtitle: "Hilo continuo + gas",
+		icon: "⌇"
+	},
+	gtaw: {
+		id: "gtaw",
+		label: "TIG (GTAW)",
+		subtitle: "Tungsteno + gas inerte",
+		icon: "◬"
+	},
+	fcaw: {
+		id: "fcaw",
+		label: "Hilo tubular (FCAW)",
+		subtitle: "Sin gas o con gas",
+		icon: "⌒"
+	}
+};
+//#endregion
 //#region src/routes/+page.svelte
 function _page($$renderer, $$props) {
 	$$renderer.component(($$renderer) => {
@@ -202,12 +254,19 @@ function _page($$renderer, $$props) {
 				title: "Baño completo",
 				subtitle: "Reforma integral de baño",
 				icon: "bath"
+			},
+			{
+				id: "welding",
+				title: "Soldadura",
+				subtitle: "Electrodo, MIG/MAG o TIG por metal y trabajo",
+				icon: "welding"
 			}
 		];
 		let wallOptions = { ...WALL_DEFAULTS };
 		({ ...ROOF_DEFAULTS });
 		({ ...FLOOR_DEFAULTS });
 		({ ...BATH_DEFAULTS });
+		({ ...WELDING_DEFAULTS });
 		meta().moneda;
 		const wallKinds = [
 			{
@@ -232,6 +291,17 @@ function _page($$renderer, $$props) {
 		derived(() => {
 			return wallKinds;
 		});
+		[
+			"smaw",
+			"gmaw",
+			"gtaw",
+			"fcaw"
+		].map((id) => ({
+			id,
+			label: PROCESS_META[id].label,
+			subtitle: PROCESS_META[id].subtitle,
+			icon: PROCESS_META[id].icon
+		}));
 		derived(() => {
 			return calculateWall(wallOptions);
 		});
@@ -262,6 +332,9 @@ function _page($$renderer, $$props) {
 				} else if (item.icon === "bath") {
 					$$renderer.push("<!--[3-->");
 					$$renderer.push(`<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="svelte-1uha8ag"><path d="M5 16h22v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5v-3z" class="svelte-1uha8ag"></path><path d="M9 16V8a3 3 0 0 1 6 0M7 11h2" class="svelte-1uha8ag"></path></svg>`);
+				} else if (item.icon === "welding") {
+					$$renderer.push("<!--[4-->");
+					$$renderer.push(`<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="svelte-1uha8ag"><path d="M16 3v9" class="svelte-1uha8ag"></path><path d="m11 8 5 4 5-4" class="svelte-1uha8ag"></path><path d="M5 18h22" class="svelte-1uha8ag"></path><path d="M5 18v8a3 3 0 0 0 3 3h16a3 3 0 0 0 3-3v-8" class="svelte-1uha8ag"></path><circle cx="11" cy="25" r="1.5" class="svelte-1uha8ag"></circle><circle cx="21" cy="25" r="1.5" class="svelte-1uha8ag"></circle></svg>`);
 				} else $$renderer.push("<!--[-1-->");
 				$$renderer.push(`<!--]--></span> <span class="menu-text svelte-1uha8ag"><strong class="svelte-1uha8ag">${escape_html(item.title)}</strong> <small class="svelte-1uha8ag">${escape_html(item.subtitle)}</small></span> <span class="menu-arrow svelte-1uha8ag" aria-hidden="true">→</span></button>`);
 			}

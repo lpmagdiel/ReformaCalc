@@ -1,10 +1,11 @@
-import { i as parse_remote_arg, o as stringify, r as create_remote_key, s as stringify_remote_arg, v as parse, y as noop } from "./chunks/shared.js";
-import { a as app_dir, s as base, t as prerendering } from "./chunks/internal2.js";
-import { C as set_nested_value, D as MUTATIVE_METHODS, S as normalize_issue, s as handle_error_and_jsonify, v as create_field_proxy, x as flatten_issues, y as deep_set } from "./chunks/utils.js";
+import { _ as noop, i as parse_remote_arg, o as stringify, r as create_remote_key, s as stringify_remote_arg } from "./chunks/shared.js";
+import { a as app_dir, s as base, t as prerendering } from "./chunks/internal.js";
+import { C as set_nested_value, E as MUTATIVE_METHODS, S as normalize_issue, s as handle_error_and_jsonify, v as create_field_proxy, x as flatten_issues, y as deep_set } from "./chunks/utils.js";
 import { error, json } from "@sveltejs/kit";
 import { HttpError, SvelteKitError, ValidationError } from "@sveltejs/kit/internal";
 import { get_request_store, with_request_store } from "@sveltejs/kit/internal/server";
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/shared.js
+import { parse } from "devalue";
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/shared.js
 /** @import { RequestEvent } from '@sveltejs/kit' */
 /** @import { ServerHooks, MaybePromise, RequestState, RemoteInternals, RequestStore, RemoteLiveQueryUserFunctionReturnType } from 'types' */
 /**
@@ -175,7 +176,7 @@ function get_implicit_lookup(internals, state) {
 	return cache;
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/command.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/command.js
 /** @import { RemoteCommand } from '@sveltejs/kit' */
 /** @import { MaybePromise, RemoteCommandInternals } from 'types' */
 /** @import { StandardSchemaV1 } from '@standard-schema/spec' */
@@ -252,7 +253,7 @@ function command(validate_or_fn, maybe_fn) {
 	return wrapper;
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/form.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/form.js
 /** @import { RemoteFormInput, RemoteForm, InvalidField } from '@sveltejs/kit' */
 /** @import { InternalRemoteFormIssue, MaybePromise, HasNonOptionalBoolean, RemoteFormInternals } from 'types' */
 /** @import { StandardSchemaV1 } from '@standard-schema/spec' */
@@ -471,7 +472,7 @@ function create_issues() {
 	}
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/prerender.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/prerender.js
 /** @import { RemoteResource, RemotePrerenderFunction } from '@sveltejs/kit' */
 /** @import { RemotePrerenderInputsGenerator, RemotePrerenderInternals, MaybePromise } from 'types' */
 /** @import { StandardSchemaV1 } from '@standard-schema/spec' */
@@ -579,7 +580,7 @@ function prerender(validate_or_fn, fn_or_options, maybe_options) {
 	return wrapper;
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/utils/shared-iterator.js
+//#region node_modules/@sveltejs/kit/src/utils/shared-iterator.js
 /**
 * A pull-style async iterator that fans out a single stream of values to
 * multiple `for await (...)` consumers. Each subscriber gets its own
@@ -781,7 +782,7 @@ var SharedIterator = class {
 	}
 };
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/query.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/query.js
 /** @import { RemoteLiveQuery, RemoteLiveQueryFunction, RemoteQuery, RemoteQueryFunction, RequestEvent } from '@sveltejs/kit' */
 /** @import { RemoteInternals, MaybePromise, RequestState, RemoteQueryLiveInternals, RemoteQueryBatchInternals, RemoteQueryInternals, RemoteLiveQueryUserFunctionReturnType } from 'types' */
 /** @import { StandardSchemaV1 } from '@standard-schema/spec' */
@@ -1295,7 +1296,7 @@ Object.defineProperty(query, "live", {
 	enumerable: true
 });
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/server/remote/requested.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/server/remote/requested.js
 /** @import { RemoteLiveQuery, RemoteLiveQueryFunction, RemoteQuery, RemoteQueryFunction, RequestedResult, QueryRequestedResult, LiveQueryRequestedResult } from '@sveltejs/kit' */
 /** @import { MaybePromise, RemoteAnyQueryInternals } from 'types' */
 /**

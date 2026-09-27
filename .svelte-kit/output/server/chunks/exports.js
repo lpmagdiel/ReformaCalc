@@ -1,5 +1,5 @@
 import "./server.js";
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/utils/hash.js
+//#region node_modules/@sveltejs/kit/src/utils/hash.js
 /**
 * Hash using djb2
 * @param {import('types').StrictBody[]} values
@@ -17,7 +17,7 @@ function hash(...values) {
 	return (hash >>> 0).toString(36);
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/utils/exports.js
+//#region node_modules/@sveltejs/kit/src/utils/exports.js
 /**
 * @param {Set<string>} expected
 */

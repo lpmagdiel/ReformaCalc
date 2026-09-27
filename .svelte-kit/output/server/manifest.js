@@ -10,12 +10,13 @@ return {
 	assets: new Set(["manifest.webmanifest","robots.txt","sw.js"]),
 	mimeTypes: {".webmanifest":"application/manifest+json",".txt":"text/plain",".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.CzQ_q7Tv.js",app:"_app/immutable/entry/app.BaM1rzXX.js",imports:["_app/immutable/entry/start.CzQ_q7Tv.js","_app/immutable/chunks/B9JM69NW.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/entry/app.BaM1rzXX.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/chunks/xihTtKlq.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.y6_Irk9M.js",app:"_app/immutable/entry/app.8XAd8PD6.js",imports:["_app/immutable/entry/start.y6_Irk9M.js","_app/immutable/chunks/DiNZQFhq.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/entry/app.8XAd8PD6.js","_app/immutable/chunks/D-xaY2UH.js","_app/immutable/chunks/xihTtKlq.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),
 			__memo(() => import('./nodes/2.js')),
-			__memo(() => import('./nodes/3.js'))
+			__memo(() => import('./nodes/3.js')),
+			__memo(() => import('./nodes/4.js'))
 		],
 		remotes: {
 			
@@ -33,6 +34,13 @@ return {
 				pattern: /^\/buscar\/?$/,
 				params: [],
 				page: { layouts: [0,], errors: [1,], leaf: 3 },
+				endpoint: null
+			},
+			{
+				id: "/proyectos",
+				pattern: /^\/proyectos\/?$/,
+				params: [],
+				page: { layouts: [0,], errors: [1,], leaf: 4 },
 				endpoint: null
 			}
 		],

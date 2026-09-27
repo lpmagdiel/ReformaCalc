@@ -1,4 +1,4 @@
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/utils/url.js
+//#region node_modules/@sveltejs/kit/src/utils/url.js
 /**
 * Matches a URI scheme. See https://www.rfc-editor.org/rfc/rfc3986#section-3.1
 * @type {RegExp}
@@ -118,7 +118,7 @@ function allow_nodejs_console_log(url) {
 	};
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/utils/routing.js
+//#region node_modules/@sveltejs/kit/src/utils/routing.js
 /**
 * @param {RegExpMatchArray} match
 * @param {import('types').RouteParam[]} params

@@ -1,6 +1,6 @@
-import { r as index_server_exports } from "../../chunks/internal.js";
-import { y as noop } from "../../chunks/shared.js";
-import "../../chunks/internal2.js";
+import { t as index_server_exports } from "../../chunks/index-server.js";
+import { _ as noop } from "../../chunks/shared.js";
+import "../../chunks/internal.js";
 import "../../chunks/routing.js";
 import { C as writable, b as escape_html, d as getContext, rt as noop$1 } from "../../chunks/server.js";
 import "../../chunks/exports.js";
@@ -76,7 +76,7 @@ if (is_legacy) {
 	updated_listener.v = () => updated$1.current = true;
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/client/client.js
+//#region node_modules/@sveltejs/kit/src/runtime/client/client.js
 /** @import { RemoteFunctionDataNode, ServerNodesResponse, ServerRedirectNode } from 'types' */
 /** @import { CacheEntry } from './remote-functions/cache.svelte.js' */
 /** @import { Query } from './remote-functions/query/instance.svelte.js' */
@@ -89,12 +89,12 @@ var { onMount, tick } = index_server_exports;
 	updated: /* @__PURE__ */ create_updated_store()
 }).updated.check;
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/state/server.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/state/server.js
 function context() {
 	return getContext("__request__");
 }
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/app/state/index.js
+//#region node_modules/@sveltejs/kit/src/runtime/app/state/index.js
 /**
 * A read-only reactive object with information about the current page, serving several use cases:
 * - retrieving the combined `data` of all pages/layouts anywhere in your component tree (also see [loading data](https://svelte.dev/docs/kit/load))
@@ -159,7 +159,7 @@ var page = {
 	}
 };
 //#endregion
-//#region node_modules/.pnpm/@sveltejs+kit@2.70.1_@sveltejs+vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__svelt_d249cb38601e267cd8fa99d816eaacc3/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte
+//#region node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte
 function Error$1($$renderer, $$props) {
 	$$renderer.component(($$renderer) => {
 		$$renderer.push(`<h1>${escape_html(page.status)}</h1> <p>${escape_html(page.error?.message)}</p>`);

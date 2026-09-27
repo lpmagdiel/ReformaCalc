@@ -20,7 +20,8 @@ export type Sistema =
   | 'bano_alicatado'
   | 'bano_sanitarios'
   | 'bano_fontaneria'
-  | 'bano_pintura';
+  | 'bano_pintura'
+  | 'welding';
 
 export const SISTEMAS: Sistema[] = [
   'drywall',
@@ -35,7 +36,8 @@ export const SISTEMAS: Sistema[] = [
   'bano_alicatado',
   'bano_sanitarios',
   'bano_fontaneria',
-  'bano_pintura'
+  'bano_pintura',
+  'welding'
 ];
 
 export type Categoria =
@@ -62,7 +64,11 @@ export type Categoria =
   | 'mueble'
   | 'mampara'
   | 'griferia'
-  | 'pintura';
+  | 'pintura'
+  | 'electrodo'
+  | 'hilo_soldadura'
+  | 'gas_soldadura'
+  | 'epi';
 
 export type Proveedor = 'obramat' | 'leroymerlin' | 'ambos';
 

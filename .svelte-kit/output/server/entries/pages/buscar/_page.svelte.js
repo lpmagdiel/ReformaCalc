@@ -54,7 +54,11 @@ function _page($$renderer, $$props) {
 				mueble: "Mueble",
 				mampara: "Mampara",
 				griferia: "Grifería",
-				pintura: "Pintura"
+				pintura: "Pintura",
+				electrodo: "Electrodo",
+				hilo_soldadura: "Hilo de soldadura",
+				gas_soldadura: "Gas de soldadura",
+				epi: "EPI / Protección"
 			}[cat];
 		}
 		let productQuery = "";

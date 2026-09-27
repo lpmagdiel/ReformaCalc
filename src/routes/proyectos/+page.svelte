@@ -1,6 +1,7 @@
 <script lang="ts">
   import { catalog } from '$lib/data/db';
   import { onMount } from 'svelte';
+  import type { Categoria } from '$lib/calc/types';
 
   type StoredProject = {
     id: string;
